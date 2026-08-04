@@ -109,6 +109,8 @@ test("reader preserves responsive access, focus, and readable overflow", () => {
   assert.match(loadPage, /state\.currentPageData = null/);
   assert.match(loadPage, /state\.currentPageDataUrl = null/);
   assert.match(readerJs, /focusedPage[\s\S]*?focus\(\{ preventScroll: true \}\)/);
+  assert.match(readerJs, /await loadPage\(state\.page\);/, "volume changes must announce their loaded page");
+  assert.doesNotMatch(readerJs, /await loadPage\(state\.page, false\)/);
   assert.match(readerJs, /const minimum = 12/);
   assert.match(readerJs, /is-overflowing/);
   assert.match(readerJs, /aria-describedby", "overflow-help/);
