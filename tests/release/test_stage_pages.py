@@ -141,8 +141,12 @@ class StagePagesTests(unittest.TestCase):
         deploy = workflow.split("\n  deploy:\n", 1)[1]
 
         self.assertIn("  pull_request:\n", workflow)
+        self.assertIn("uses: actions/checkout@v6", build)
+        self.assertIn("uses: actions/setup-python@v6", build)
+        self.assertIn("uses: actions/setup-node@v6", build)
         self.assertIn('node-version: "22.12.0"', build)
         self.assertIn("scripts/stage_pages.py", workflow)
+        self.assertIn("uses: actions/upload-pages-artifact@v5", build)
         self.assertIn("path: .pages-artifact", build)
         self.assertIn("include-hidden-files: true", build)
         self.assertIn("permissions:\n      contents: read", build)
@@ -155,9 +159,20 @@ class StagePagesTests(unittest.TestCase):
         self.assertIn("github.ref == 'refs/heads/main'", deploy)
         self.assertIn("pages: write", deploy)
         self.assertIn("id-token: write", deploy)
+        self.assertIn("uses: actions/checkout@v6", deploy)
+        self.assertIn("uses: actions/setup-python@v6", deploy)
         self.assertIn("actions/configure-pages", deploy)
         self.assertIn("actions/deploy-pages", deploy)
         self.assertIn("scripts/release_smoke.py --root . postdeploy", deploy)
+
+    def test_editor_workflow_uses_node24_action_runtime(self) -> None:
+        repository_root = Path(__file__).resolve().parents[2]
+        workflow = (
+            repository_root / ".github" / "workflows" / "editor-ci.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("uses: actions/checkout@v6", workflow)
+        self.assertIn("uses: actions/setup-node@v6", workflow)
 
 
 if __name__ == "__main__":
