@@ -1,0 +1,626 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://maj-6.github.io/schemas/editor-project.schema.json",
+  "title": "World Herb Library facsimile authoring project",
+  "description": "Canonical authoring database consumed by the modular v2 engine and Electron editor. Transient editor context, history, credentials, and window layout are deliberately outside this document.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schemaVersion",
+    "projectId",
+    "displayName",
+    "revision",
+    "requiredExtensions",
+    "optionalExtensions",
+    "sourceLibrary",
+    "taxonomy",
+    "components",
+    "rules",
+    "books",
+    "collections",
+    "workspace",
+    "extensions",
+    "publicationProfiles"
+  ],
+  "properties": {
+    "schema": { "const": "whl-facsimile-project/2" },
+    "schemaVersion": { "const": 2 },
+    "projectId": { "$ref": "#/$defs/safeId" },
+    "displayName": { "$ref": "#/$defs/displayName" },
+    "revision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "requiredExtensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/extensionId" }
+    },
+    "optionalExtensions": { "$ref": "#/$defs/extensionDescriptorMap" },
+    "sourceLibrary": { "$ref": "#/$defs/sourceLibrary" },
+    "taxonomy": { "$ref": "#/$defs/taxonomy" },
+    "components": { "$ref": "#/$defs/componentBag" },
+    "rules": { "$ref": "#/$defs/ruleSet" },
+    "books": { "$ref": "#/$defs/bookMap" },
+    "collections": { "$ref": "#/$defs/collectionMap" },
+    "workspace": { "$ref": "#/$defs/workspaceOverlay" },
+    "extensions": { "$ref": "#/$defs/jsonObject" },
+    "publicationProfiles": { "$ref": "#/$defs/publicationProfileMap" }
+  },
+  "$defs": {
+    "safeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "not": { "enum": ["__proto__", "prototype", "constructor"] }
+    },
+    "extensionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9.-]{0,127}$",
+      "not": { "enum": ["__proto__", "prototype", "constructor"] }
+    },
+    "role": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+      "not": { "enum": ["__proto__", "prototype", "constructor"] }
+    },
+    "pageKey": {
+      "type": "string",
+      "pattern": "^(?:[1-9]|[1-9][0-9]{1,6}|10000000)$"
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "fingerprint": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "color": {
+      "type": "string",
+      "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$"
+    },
+    "normalizedBox": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "type": "number", "minimum": 0, "maximum": 1 }
+    },
+    "contentLayers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "modern": { "type": "string" },
+        "diplomatic": { "type": "string" }
+      }
+    },
+    "typography": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fontFamily": { "enum": ["edition", "georgia", "palatino", "sans"] },
+        "fontSize": { "type": "number", "minimum": 0.5, "maximum": 4 },
+        "fontWeight": { "type": "integer", "minimum": 100, "maximum": 900 },
+        "color": { "$ref": "#/$defs/color" },
+        "lineHeight": { "type": "number", "minimum": 0.5, "maximum": 4 },
+        "letterSpacing": { "type": "number", "minimum": -0.25, "maximum": 1 }
+      }
+    },
+    "transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "box": { "$ref": "#/$defs/normalizedBox" },
+        "translateX": { "type": "number", "minimum": -1, "maximum": 1 },
+        "translateY": { "type": "number", "minimum": -1, "maximum": 1 },
+        "scaleX": { "type": "number", "minimum": 0.25, "maximum": 4 },
+        "scaleY": { "type": "number", "minimum": 0.25, "maximum": 4 }
+      }
+    },
+    "textLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["scroll", "grow-width", "shrink-text", "grow-then-shrink"] },
+        "wrap": { "enum": ["normal", "nowrap", "balance"] },
+        "overflow": { "enum": ["hidden", "auto", "scroll", "visible"] },
+        "maxWidthScale": { "type": "number", "minimum": 1, "maximum": 4 },
+        "minFontScale": { "type": "number", "minimum": 0.5, "maximum": 1 }
+      }
+    },
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "modern": { "type": "string" },
+        "diplomatic": { "type": "string" }
+      }
+    },
+    "visibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "modern": { "type": "boolean" },
+        "diplomatic": { "type": "boolean" },
+        "publication": { "type": "boolean" }
+      }
+    },
+    "decoratedInitialEquivalent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "dependentRequired": {
+        "consumePrefix": ["continuationRegionId"]
+      },
+      "properties": {
+        "text": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "continuationRegionId": { "$ref": "#/$defs/safeId" },
+        "consumePrefix": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "decoratedInitial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "representation": { "enum": ["auto", "original", "diplomatic", "modern", "hidden"] },
+        "fallback": { "enum": ["auto", "original", "diplomatic", "modern", "hidden"] },
+        "representationByEdition": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "modern": { "enum": ["auto", "original", "diplomatic", "modern", "hidden"] },
+            "diplomatic": { "enum": ["auto", "original", "diplomatic", "modern", "hidden"] }
+          }
+        },
+        "equivalents": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "modern": { "$ref": "#/$defs/decoratedInitialEquivalent" },
+            "diplomatic": { "$ref": "#/$defs/decoratedInitialEquivalent" }
+          }
+        },
+        "original": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "assetRef": { "$ref": "#/$defs/safeId" },
+            "fit": { "enum": ["contain", "cover", "stretch"] },
+            "alignX": { "type": "number", "minimum": 0, "maximum": 1 },
+            "alignY": { "type": "number", "minimum": 0, "maximum": 1 },
+            "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+            "blendMode": { "enum": ["normal", "multiply"] }
+          }
+        },
+        "text": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "placement": { "enum": ["inline", "drop-cap", "overlay"] },
+            "dropLines": { "type": "integer", "minimum": 1, "maximum": 12 },
+            "scale": { "type": "number", "minimum": 0.25, "maximum": 4 },
+            "align": { "enum": ["start", "center", "end"] }
+          }
+        },
+        "accessibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "decorative": { "type": "boolean" },
+            "description": { "type": "string", "maxLength": 500 }
+          }
+        }
+      }
+    },
+    "componentBag": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "properties": {
+        "core.typography": { "$ref": "#/$defs/typography" },
+        "core.transform": { "$ref": "#/$defs/transform" },
+        "core.textLayout": { "$ref": "#/$defs/textLayout" },
+        "core.content": { "$ref": "#/$defs/content" },
+        "core.visibility": { "$ref": "#/$defs/visibility" },
+        "render.decoratedInitial": { "$ref": "#/$defs/decoratedInitial" }
+      },
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    },
+    "extensionDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "data": { "$ref": "#/$defs/jsonValue" }
+      }
+    },
+    "extensionDescriptorMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/extensionId" },
+      "additionalProperties": { "$ref": "#/$defs/extensionDescriptor" }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["components"],
+      "properties": { "components": { "$ref": "#/$defs/componentBag" } }
+    },
+    "safeRuleMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/rule" }
+    },
+    "roleRuleMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/role" },
+      "additionalProperties": { "$ref": "#/$defs/rule" }
+    },
+    "ruleSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceRoles", "categories", "classes"],
+      "properties": {
+        "sourceRoles": { "$ref": "#/$defs/roleRuleMap" },
+        "categories": { "$ref": "#/$defs/safeRuleMap" },
+        "classes": { "$ref": "#/$defs/safeRuleMap" }
+      }
+    },
+    "sourceRegionData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sourceRole"],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeId" },
+        "sourceRole": { "$ref": "#/$defs/role" },
+        "box": { "$ref": "#/$defs/normalizedBox" },
+        "content": { "$ref": "#/$defs/contentLayers" },
+        "assetRef": { "$ref": "#/$defs/safeId" },
+        "fingerprint": { "$ref": "#/$defs/fingerprint" }
+      }
+    },
+    "sourceRegionMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/sourceRegionData" }
+    },
+    "sourcePageData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["page", "regions"],
+      "properties": {
+        "page": { "type": "integer", "minimum": 1, "maximum": 10000000 },
+        "displayName": { "$ref": "#/$defs/displayName" },
+        "fingerprint": { "$ref": "#/$defs/fingerprint" },
+        "regions": { "$ref": "#/$defs/sourceRegionMap" }
+      }
+    },
+    "sourcePageMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/pageKey" },
+      "additionalProperties": { "$ref": "#/$defs/sourcePageData" }
+    },
+    "sourceBookData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "pages"],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeId" },
+        "displayName": { "$ref": "#/$defs/displayName" },
+        "fingerprint": { "$ref": "#/$defs/fingerprint" },
+        "pages": { "$ref": "#/$defs/sourcePageMap" }
+      }
+    },
+    "sourceBookMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/sourceBookData" }
+    },
+    "sourceLibrary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["books"],
+      "properties": { "books": { "$ref": "#/$defs/sourceBookMap" } }
+    },
+    "annotations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "displayName": { "$ref": "#/$defs/displayName" },
+        "categoryId": { "$ref": "#/$defs/safeId" },
+        "classIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/safeId" }
+        },
+        "labelIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/safeId" }
+        }
+      }
+    },
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bookId", "page", "regionId"],
+      "properties": {
+        "bookId": { "$ref": "#/$defs/safeId" },
+        "page": { "type": "integer", "minimum": 1, "maximum": 10000000 },
+        "regionId": { "$ref": "#/$defs/safeId" },
+        "fingerprint": { "$ref": "#/$defs/fingerprint" }
+      }
+    },
+    "regionObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sourceRef", "origin", "annotations", "components"],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeId" },
+        "sourceRef": { "$ref": "#/$defs/sourceRef" },
+        "origin": { "enum": ["source", "authored"] },
+        "annotations": { "$ref": "#/$defs/annotations" },
+        "components": { "$ref": "#/$defs/componentBag" }
+      }
+    },
+    "regionMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/regionObject" }
+    },
+    "pageObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["page", "components", "rules", "regions"],
+      "properties": {
+        "page": { "type": "integer", "minimum": 1, "maximum": 10000000 },
+        "displayName": { "$ref": "#/$defs/displayName" },
+        "components": { "$ref": "#/$defs/componentBag" },
+        "rules": { "$ref": "#/$defs/ruleSet" },
+        "regions": { "$ref": "#/$defs/regionMap" }
+      }
+    },
+    "pageMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/pageKey" },
+      "additionalProperties": { "$ref": "#/$defs/pageObject" }
+    },
+    "bookObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "components", "rules", "pages"],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeId" },
+        "displayName": { "$ref": "#/$defs/displayName" },
+        "components": { "$ref": "#/$defs/componentBag" },
+        "rules": { "$ref": "#/$defs/ruleSet" },
+        "pages": { "$ref": "#/$defs/pageMap" }
+      }
+    },
+    "bookMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/bookObject" }
+    },
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "capabilities", "components"],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeId" },
+        "displayName": { "$ref": "#/$defs/displayName" },
+        "parentId": { "$ref": "#/$defs/safeId" },
+        "capabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/safeId" }
+        },
+        "color": { "$ref": "#/$defs/color" },
+        "components": { "$ref": "#/$defs/componentBag" }
+      }
+    },
+    "categoryMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/category" }
+    },
+    "regionClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "priority", "components"],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeId" },
+        "displayName": { "$ref": "#/$defs/displayName" },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "priority": { "type": "integer", "minimum": -1000000, "maximum": 1000000 },
+        "components": { "$ref": "#/$defs/componentBag" }
+      }
+    },
+    "regionClassMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/regionClass" }
+    },
+    "label": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName"],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeId" },
+        "displayName": { "$ref": "#/$defs/displayName" },
+        "color": { "$ref": "#/$defs/color" }
+      }
+    },
+    "labelMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/label" }
+    },
+    "taxonomy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["categories", "classes", "labels"],
+      "properties": {
+        "categories": { "$ref": "#/$defs/categoryMap" },
+        "classes": { "$ref": "#/$defs/regionClassMap" },
+        "labels": { "$ref": "#/$defs/labelMap" }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "regionIds"],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeId" },
+        "displayName": { "$ref": "#/$defs/displayName" },
+        "regionIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/safeId" }
+        }
+      }
+    },
+    "collectionMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/collection" }
+    },
+    "overlayComponentBag": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/jsonObject" }
+    },
+    "overlayRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["components"],
+      "properties": { "components": { "$ref": "#/$defs/overlayComponentBag" } }
+    },
+    "safeOverlayRuleMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/overlayRule" }
+    },
+    "roleOverlayRuleMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/role" },
+      "additionalProperties": { "$ref": "#/$defs/overlayRule" }
+    },
+    "overlayRuleSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceRoles", "categories", "classes"],
+      "properties": {
+        "sourceRoles": { "$ref": "#/$defs/roleOverlayRuleMap" },
+        "categories": { "$ref": "#/$defs/safeOverlayRuleMap" },
+        "classes": { "$ref": "#/$defs/safeOverlayRuleMap" }
+      }
+    },
+    "overlayAnnotations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "displayName": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/displayName" }] },
+        "categoryId": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/safeId" }] },
+        "classIds": {
+          "anyOf": [
+            { "type": "null" },
+            { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/safeId" } }
+          ]
+        },
+        "labelIds": {
+          "anyOf": [
+            { "type": "null" },
+            { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/safeId" } }
+          ]
+        }
+      }
+    },
+    "regionOverlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "annotations": { "$ref": "#/$defs/overlayAnnotations" },
+        "components": { "$ref": "#/$defs/overlayComponentBag" }
+      }
+    },
+    "regionOverlayMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/regionOverlay" }
+    },
+    "pageOverlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["components", "rules", "regions"],
+      "properties": {
+        "components": { "$ref": "#/$defs/overlayComponentBag" },
+        "rules": { "$ref": "#/$defs/overlayRuleSet" },
+        "regions": { "$ref": "#/$defs/regionOverlayMap" }
+      }
+    },
+    "pageOverlayMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/pageKey" },
+      "additionalProperties": { "$ref": "#/$defs/pageOverlay" }
+    },
+    "bookOverlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["components", "rules", "pages"],
+      "properties": {
+        "components": { "$ref": "#/$defs/overlayComponentBag" },
+        "rules": { "$ref": "#/$defs/overlayRuleSet" },
+        "pages": { "$ref": "#/$defs/pageOverlayMap" }
+      }
+    },
+    "bookOverlayMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/bookOverlay" }
+    },
+    "workspaceOverlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["components", "rules", "books"],
+      "properties": {
+        "components": { "$ref": "#/$defs/overlayComponentBag" },
+        "rules": { "$ref": "#/$defs/overlayRuleSet" },
+        "books": { "$ref": "#/$defs/bookOverlayMap" }
+      }
+    },
+    "publicationProfileMap": {
+      "type": "object",
+      "propertyNames": {
+        "not": { "enum": ["__proto__", "prototype", "constructor"] }
+      },
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    },
+    "jsonValue": {
+      "type": ["null", "boolean", "number", "string", "array", "object"],
+      "items": { "$ref": "#/$defs/jsonValue" },
+      "propertyNames": {
+        "not": { "enum": ["__proto__", "prototype", "constructor"] }
+      },
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    },
+    "jsonObject": {
+      "type": "object",
+      "propertyNames": {
+        "not": { "enum": ["__proto__", "prototype", "constructor"] }
+      },
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    }
+  }
+}

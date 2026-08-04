@@ -29,6 +29,13 @@ sampled QA report.
   structure (the runtime validator additionally enforces value bounds);
 - `docs/REGION_EDITOR.md` — region-settings precedence, editing safety,
   persistence, import/export, and publication contract;
+- `docs/spec/` — the modular v2 engine, Blender-inspired context model,
+  BlueprintJS desktop UX, and secure publication specifications;
+- `docs/ILLUMINATED_CAPITALS.md` — audited taxonomy, asset, rendering, and
+  accessibility contract for decorated and illuminated initials;
+- `packages/facsimile-engine/` — dependency-free v2 authoring/evaluation core,
+  migration adapter, operators, and reader-publication compiler;
+- `editor/` — sandboxed Electron and BlueprintJS desktop editor foundation;
 - `pipeline/process.py` — resumable OCR, translation, scan, thumbnail, paper
   color, and non-generative artwork build;
 - `pipeline/qa.py` — every-page validation plus fixed sample overlays;
@@ -38,6 +45,7 @@ sampled QA report.
   editorial overrides;
 - `scripts/release_smoke.py` — fail-closed local, CloudFront/CORS, and deployed
   Pages verification;
+- `scripts/stage_pages.py` — allowlisted reader-only Pages artifact staging;
 - `pipeline/whl_selection.csv` — the three selected catalogue rows, paired
   with the checksum and byte count of the full catalogue in `books.json`;
 - `tests/pipeline/`, `tests/release/`, `tests/web/` — pipeline, publication,
@@ -68,7 +76,7 @@ artifacts.
 ## Validate
 
 ```powershell
-node --test tests\web\static-reader.test.mjs tests\web\region-settings.test.mjs
+node --test tests\web\*.test.mjs
 python -m unittest discover -s tests\pipeline
 python -m unittest discover -s tests\release
 python -m compileall -q pipeline scripts tests
@@ -78,15 +86,38 @@ Run `pipeline/qa.py --strict` after processing. Model confidence and embedded
 PDF text are diagnostic signals, not empirical accuracy or ground truth; the
 site labels all modern text as machine-assisted and keeps the scan visible.
 
-## Reader and region editor
+## Reader and editor transition
 
-The production project configuration defaults to reader-only mode. Region
-editing is initialized only when `features.regionEditor` in
-`data/reader-config.json` is the literal JSON boolean `true`; a missing,
-malformed, or differently typed value fails closed. This public static flag is
-a feature gate, not authentication. The browser stores only local drafts and
-exports validated JSON. It contains no AWS credentials and cannot publish
-directly to S3, CloudFront, GitHub, or this repository.
+The transitional web editor is currently enabled as requested. It initializes
+only when `features.regionEditor` in `data/reader-config.json` is the literal
+JSON boolean `true`; a missing, malformed, or differently typed value fails
+closed. This public static flag is a feature gate, not authentication. The
+browser stores only local drafts and exports validated JSON. It contains no AWS
+credentials and cannot publish directly to S3, CloudFront, GitHub, or this
+repository.
+
+The target architecture separates the products: GitHub Pages remains the
+read-only reader, while a sandboxed Electron application owns authoring,
+taxonomy, context-sensitive operators, local persistence, and review-first
+publication. The Pages workflow now stages an explicit allowlist so desktop
+source, packages, tests, and pipeline code are not deployed accidentally. The
+current browser editor remains a compatibility bridge until the desktop app
+and compiled reader reach feature parity.
+
+The initial desktop shell is under `editor/` and uses pinned Electron, React,
+and BlueprintJS dependencies:
+
+```powershell
+cd editor
+npm.cmd install
+npm.cmd run dev
+```
+
+See [`docs/spec/README.md`](docs/spec/README.md) for the v2 engine, UI, and
+publication contracts. The model keeps immutable OCR roles separate from
+authored categories, custom classes, and editorial labels. Decorated initials
+use a conditional renderer with book defaults and page/region overrides; the
+feature remains secondary in the Properties editor and context menu.
 
 Approved settings in `data/region-settings.json` remain visible to ordinary
 readers and overlay, rather than mutate, immutable OCR page JSON. Values resolve

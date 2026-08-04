@@ -2,7 +2,7 @@
   "schema": "whl-reader-config/1",
   "projectId": "living-herbal",
   "features": {
-    "regionEditor": false
+    "regionEditor": true
   },
   "publishedSettings": "data/region-settings.json",
   "draftStorageKey": "whl-region-settings-v1"
