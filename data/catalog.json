@@ -1,0 +1,68 @@
+{
+  "schema": "whl-facsimile-catalog/1",
+  "project": {
+    "title": "The Living Herbal",
+    "subtitle": "Three early herbals, newly readable",
+    "method": "Mistral OCR 4 paragraph geometry, conservative English reading layers, and non-generative source artwork",
+    "pipeline_version": "1.3.5",
+    "source_catalog": {
+      "filename": "whl_catalog.csv",
+      "sha256": "e94bc6c1f91a84307fc2a5c7c9b2afb8c75157f5e4372f9d8677a55ab5beb5c2",
+      "bytes": 1514650,
+      "rows": 5534,
+      "publication_files": 5314,
+      "selection_snapshot": "whl_selection.csv",
+      "selection_snapshot_sha256": "ee04c114b83f7a107b8a2bdebdfef5d0915a62d2a44d96839f2a9ba1dc3cb8f5"
+    }
+  },
+  "books": [
+    {
+      "id": "fuchs-1542",
+      "title": "De Historia Stirpivm Commentarii Insignes",
+      "short_title": "De Historia Stirpium",
+      "subtitle": "A modern English reading facsimile",
+      "creator": "Leonhart Fuchs",
+      "year": 1542,
+      "language": "Latin",
+      "pages": 940,
+      "description": "Fuchs pairs a systematic Latin account of plants with some of the Renaissance's most influential botanical woodcuts. The English layer keeps the page architecture while opening the text to non-Latin readers.",
+      "significance": "A landmark of descriptive botany and botanical illustration, first printed in 1542 with more than five hundred plant images.",
+      "accent": "#9f4e32",
+      "cover_page": 236,
+      "cover": "https://d3hgn3a6vd7iau.cloudfront.net/v2/books/fuchs-1542/scan/0236.webp",
+      "manifest": "https://d3hgn3a6vd7iau.cloudfront.net/v2/books/fuchs-1542/manifest.json"
+    },
+    {
+      "id": "herbarius-1488",
+      "title": "Herbarius zü Teütsch",
+      "short_title": "Herbarius zü Teütsch",
+      "subtitle": "A modern English reading facsimile",
+      "creator": "Attributed to Johannes von Cuba; printed by Hans Schönsperger",
+      "year": 1488,
+      "language": "German",
+      "pages": 526,
+      "description": "This vernacular incunable combines dense two-column blackletter with compact botanical woodcuts, many touched with color. The facsimile translates the early German while preserving the irregular printed grid.",
+      "significance": "An early German-language herbal in the Gart der Gesundheit tradition and a demanding example of incunable page design.",
+      "accent": "#607342",
+      "cover_page": 264,
+      "cover": "https://d3hgn3a6vd7iau.cloudfront.net/v2/books/herbarius-1488/scan/0264.webp",
+      "manifest": "https://d3hgn3a6vd7iau.cloudfront.net/v2/books/herbarius-1488/manifest.json"
+    },
+    {
+      "id": "banckes-1552",
+      "title": "A Boke of the Propreties of Herbes",
+      "short_title": "The Banckes Herbal",
+      "subtitle": "A normalized modern-English reading facsimile",
+      "creator": "Anonymous; 1552 Copland/Kele imprint",
+      "year": 1552,
+      "language": "Archaic English",
+      "pages": 157,
+      "description": "A compact descendant of the first herbal printed in English. Its heavy blackletter and unfamiliar spelling become readable modern English without smoothing away the work's abrupt recipes or period voice.",
+      "significance": "The anonymous Banckes tradition begins with the first printed English herbal of 1525; this complete 1552 imprint ends with its original colophon.",
+      "accent": "#735a74",
+      "cover_page": 1,
+      "cover": "https://d3hgn3a6vd7iau.cloudfront.net/v2/books/banckes-1552/scan/0001.webp",
+      "manifest": "https://d3hgn3a6vd7iau.cloudfront.net/v2/books/banckes-1552/manifest.json"
+    }
+  ]
+}

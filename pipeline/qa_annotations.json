@@ -1,0 +1,81 @@
+{
+  "schema": "whl-facsimile-qa-annotations/1",
+  "method_note": "These notes record prior visual inspection of fixed sample overlays. They are qualitative observations, not transcription ground truth or measured OCR accuracy.",
+  "books": {
+    "fuchs-1542": {
+      "book_observation": "The Latin sample was the strongest of the three for character recognition. Across the fixed sample, region geometry and reading order were generally strong, while semantic block types remained hints rather than dependable labels.",
+      "pages": {
+        "25": {
+          "status": "observed",
+          "note": "The overlay closely follows the two main columns, marginal labels, section headings, a chain-like motif, and the footer signature. An adjacent V-shaped diagram is not boxed; the scan-derived art-remainder backstop preserves it. Dense marginal matter is spatially separated, although no manual transcription or polygon ground truth was prepared."
+        },
+        "236": {
+          "status": "observed",
+          "note": "A preliminary single-page image probe missed the full-page botanical woodcut and boxed only its labels and running header; the final document-range run did return a useful full-image box. That mode-sensitive disagreement is why the deterministic art-remainder backstop does not rely on OCR image labels alone."
+        },
+        "471": {
+          "status": "observed",
+          "note": "The long upper text block and the smaller chapter below it are separated cleanly, including headings, marginalia, and the low footer. No manual transcription or polygon ground truth was prepared."
+        },
+        "706": {
+          "status": "observed",
+          "note": "The overlay preserves the page's large areas of whitespace while separating chapter title, names, form, habitat, time, temperament, virtues, marginal labels, and catch-word."
+        },
+        "900": {
+          "status": "observed",
+          "note": "The centered chapter structure and its marginal labels are spatially coherent across a long page; the boxes remain paragraph-level and are not evidence of line- or character-level accuracy."
+        }
+      }
+    },
+    "herbarius-1488": {
+      "book_observation": "The two-column layout was recovered well in the sampled pages. Fraktur recognition was less reliable than the Latin sample, especially among historically similar s/f/u/v/n forms, so the reading layer should remain visibly labeled as machine-assisted.",
+      "pages": {
+        "5": {
+          "status": "observed",
+          "note": "The two index columns are recovered as separate reading regions. A handwritten ownership or acquisition note above the printed columns is also recovered as a header region and remains visibly distinct from the printed index."
+        },
+        "20": {
+          "status": "observed",
+          "note": "Both dense Fraktur columns are bounded coherently with the central gutter left clear; this supports layout use but not character-level accuracy."
+        },
+        "264": {
+          "status": "observed",
+          "note": "Both botanical woodcuts were returned with useful image bounding boxes, and the surrounding two-column text regions were spatially coherent."
+        },
+        "395": {
+          "status": "observed",
+          "note": "The botanical woodcut was returned with a useful image bounding box; this is a positive layout-extraction case rather than evidence of character-level accuracy."
+        },
+        "500": {
+          "status": "observed",
+          "note": "The index is recovered primarily as two broad column regions, with a separate heading and short continuation. The geometry is usable, but dense index typography remains a stress case for character recognition and stable region-level translation."
+        }
+      }
+    },
+    "banckes-1552": {
+      "book_observation": "Blackletter text was usable for normalization but retained long-s and adjacent-letter confusions. Region geometry was generally tight; some semantic labels, especially marginalia, should be treated as heuristic styling hints.",
+      "pages": {
+        "1": {
+          "status": "observed",
+          "note": "The title-page woodcut was detected as an image region, and the remaining title-page text was separated into usable reading regions."
+        },
+        "5": {
+          "status": "observed",
+          "note": "The principal blackletter paragraph, running title, next entry heading, signature, and catch-word are separated into usable regions."
+        },
+        "40": {
+          "status": "observed",
+          "note": "The decorated initial was detected as an image region while the adjacent blackletter text remained separately boxed."
+        },
+        "79": {
+          "status": "observed",
+          "note": "The large recipe paragraph, the new 'Maces' heading, and the page-final continuation are spatially distinct, with the outer paper margin preserved."
+        },
+        "150": {
+          "status": "observed",
+          "note": "Eleven regions recover the centered text structure, including six short line boxes with varied widths, and remain legible against the lightly stained paper."
+        }
+      }
+    }
+  }
+}
