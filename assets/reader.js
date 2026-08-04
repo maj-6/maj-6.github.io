@@ -3,6 +3,16 @@
 
   const CATALOG_PATH = "data/catalog.json";
   const FONT_CHOICES = ["edition", "georgia", "palatino", "sans"];
+  const ROLE_TEXT_MAXIMUMS = Object.freeze({
+    title: 42,
+    heading: 30,
+    header: 22,
+    caption: 17,
+    marginalia: 14,
+    note: 14,
+    footer: 15,
+    "page-number": 15
+  });
   const catalogUrl = new URL(CATALOG_PATH, window.location.href);
   const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
 
@@ -22,7 +32,6 @@
     layerInputs: [...document.querySelectorAll('input[name="text-layer"]')],
     layoutToggle: document.querySelector("#layout-toggle"),
     viewButtons: [...document.querySelectorAll(".view-switcher button[data-view]")],
-    panelHeaders: [...document.querySelectorAll(".panel-header")],
     shell: document.querySelector("#reader-shell"),
     controls: document.querySelector("#reader-controls"),
     spread: document.querySelector("#page-spread"),
@@ -87,7 +96,8 @@
     messageTimer: 0,
     fitFrame: 0,
     sizeFrame: 0,
-    pageRatio: 0.72
+    pageRatio: 0.72,
+    pageDisplayWidth: 520
   };
 
   function readPreference(key, fallback, allowed) {
@@ -787,17 +797,14 @@
     elements.pageConfidence.title = "Automated OCR confidence; this is not a human accuracy rating.";
   }
 
-  function scheduleTextFit() {
+  function scheduleTextFit(pageWidth = state.pageDisplayWidth) {
+    const resolvedPageWidth = Number.isFinite(Number(pageWidth)) && Number(pageWidth) > 0 ? Number(pageWidth) : 700;
+    const manifestScale = clamp(Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--facsimile-body-scale")) || 1, 0.75, 1.35);
+    const regions = [...elements.facsimileText.querySelectorAll(".text-region")];
+    regions.forEach((region) => applyTextRegionPreferences(region, resolvedPageWidth, manifestScale));
     window.cancelAnimationFrame(state.fitFrame);
     state.fitFrame = window.requestAnimationFrame(() => {
-      const regions = [...elements.facsimileText.querySelectorAll(".text-region")];
-      const pending = regions.filter((region) => !Number.isFinite(Number.parseFloat(region.dataset.referenceSizeRatio)));
-      if (pending.length) {
-        elements.facsimileText.classList.add("is-reference-fit");
-        pending.forEach(fitReferenceTextRegion);
-        elements.facsimileText.classList.remove("is-reference-fit");
-      }
-      regions.forEach(applyTextRegionPreferences);
+      regions.filter((region) => region.isConnected).forEach(updateTextRegionOverflow);
     });
   }
 
@@ -843,13 +850,6 @@
     }
   }
 
-  function syncPanelHeaderHeights() {
-    elements.panelHeaders.forEach((header) => header.style.removeProperty("min-height"));
-    if (!usesTwoPageSpread()) return;
-    const maximum = Math.ceil(Math.max(...elements.panelHeaders.map((header) => header.getBoundingClientRect().height)));
-    elements.panelHeaders.forEach((header) => { header.style.minHeight = `${maximum}px`; });
-  }
-
   function updatePageSizing(ratio = state.pageRatio, preservePosition = true, positionOverride = null) {
     const position = positionOverride || (preservePosition ? spreadPosition() : null);
     state.pageRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 0.72;
@@ -866,16 +866,16 @@
     const widthBound = Math.max(180, (scrollerWidth - (twoUp ? 2 : 0)) / pageColumns);
     const baseWidth = clamp(Math.min(availableHeight * state.pageRatio, widthBound), 180, 830);
     const displayWidth = Math.round(baseWidth * state.zoom);
+    state.pageDisplayWidth = displayWidth;
     document.documentElement.style.setProperty("--page-ratio", String(state.pageRatio));
     document.documentElement.style.setProperty("--page-base-width", `${Math.round(baseWidth)}px`);
     document.documentElement.style.setProperty("--page-display-width", `${displayWidth}px`);
-    document.documentElement.style.setProperty("--spread-max-height", `${Math.round(availableHeight + 54)}px`);
+    document.documentElement.style.setProperty("--spread-max-height", `${Math.round(availableHeight)}px`);
     updateSpreadAccessibility(twoUp);
+    scheduleTextFit(displayWidth);
     window.cancelAnimationFrame(state.sizeFrame);
     state.sizeFrame = window.requestAnimationFrame(() => {
-      syncPanelHeaderHeights();
       restoreSpreadPosition(position);
-      scheduleTextFit();
     });
   }
 
@@ -886,57 +886,32 @@
     return 1.17;
   }
 
-  function fitReferenceTextRegion(region) {
-    if (!region.textContent || region.clientWidth < 2 || region.clientHeight < 2) return;
-    const pageWidth = elements.facsimilePage.clientWidth || 700;
-    const logicalPageWidth = pageWidth / state.zoom;
+  function roleTextBaseSize(role, logicalPageWidth, manifestScale = 1) {
     const scale = clamp(logicalPageWidth / 720, 0.45, 1.5);
-    const role = region.dataset.role;
-    const roleMaximums = {
-      title: 42,
-      heading: 30,
-      header: 22,
-      caption: 17,
-      marginalia: 14,
-      note: 14,
-      footer: 15,
-      "page-number": 15
-    };
-    const baseMaximum = roleMaximums[role] ?? 20;
-    const manifestScale = clamp(Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--facsimile-body-scale")) || 1, 0.75, 1.35);
-    const minimum = 12 * state.zoom;
-    let low = minimum;
-    let high = Math.max(low, baseMaximum * scale * manifestScale * state.zoom);
-    region.classList.remove("is-overflowing");
-    region.removeAttribute("tabindex");
-    region.removeAttribute("aria-describedby");
-    region.removeAttribute("title");
-    region.style.fontSize = `${low}px`;
-
-    const fits = () => region.scrollHeight <= region.clientHeight + 1 && region.scrollWidth <= region.clientWidth + 1;
-    if (fits()) {
-      for (let iteration = 0; iteration < 10; iteration += 1) {
-        const middle = (low + high) / 2;
-        region.style.fontSize = `${middle}px`;
-        if (fits()) low = middle;
-        else high = middle;
-      }
-    }
-    const referenceSize = Math.floor(low * 10) / 10;
-    region.dataset.referenceSizeRatio = String(referenceSize / pageWidth);
+    const roleMaximum = ROLE_TEXT_MAXIMUMS[role] ?? 20;
+    return Math.max(12, roleMaximum * scale * clamp(manifestScale, 0.75, 1.35));
   }
 
-  function applyTextRegionPreferences(region) {
-    if (!region.textContent || region.clientWidth < 2 || region.clientHeight < 2) return;
-    const ratio = Number.parseFloat(region.dataset.referenceSizeRatio);
-    if (!Number.isFinite(ratio)) return;
-    const pageWidth = elements.facsimilePage.clientWidth || 700;
-    const requestedSize = Math.max(4, ratio * pageWidth * state.textScale);
+  function displayTextSize(role, pageWidth, zoom, textScale, manifestScale = 1) {
+    const safeZoom = clamp(Number(zoom) || 1, 0.5, 2.5);
+    const numericWidth = Number(pageWidth);
+    const safeWidth = Number.isFinite(numericWidth) && numericWidth > 0 ? numericWidth : 700 * safeZoom;
+    const logicalPageWidth = safeWidth / safeZoom;
+    return Math.max(4, roleTextBaseSize(role, logicalPageWidth, manifestScale) * safeZoom * clamp(Number(textScale) || 1, 0.75, 2));
+  }
+
+  function applyTextRegionPreferences(region, pageWidth, manifestScale = 1) {
+    if (!region.textContent) return;
+    const requestedSize = displayTextSize(region.dataset.role, pageWidth, state.zoom, state.textScale, manifestScale);
     region.style.fontSize = `${Math.floor(requestedSize * 10) / 10}px`;
     region.style.lineHeight = String(roleLineHeight(region.dataset.role) * state.lineHeightScale);
-    const fits = region.scrollHeight <= region.clientHeight + 1 && region.scrollWidth <= region.clientWidth + 1;
-    region.classList.toggle("is-overflowing", !fits);
-    if (fits) {
+  }
+
+  function updateTextRegionOverflow(region) {
+    const measurable = Boolean(region.textContent) && region.clientWidth >= 1 && region.clientHeight >= 1;
+    const overflows = measurable && (region.scrollHeight > region.clientHeight + 1 || region.scrollWidth > region.clientWidth + 1);
+    region.classList.toggle("is-overflowing", overflows);
+    if (!overflows) {
       region.removeAttribute("tabindex");
       region.removeAttribute("aria-describedby");
       region.removeAttribute("title");
@@ -1346,7 +1321,7 @@
     });
 
     if ("ResizeObserver" in window) {
-      const resizeObserver = new ResizeObserver(scheduleTextFit);
+      const resizeObserver = new ResizeObserver(() => scheduleTextFit());
       resizeObserver.observe(elements.facsimilePage);
     }
     window.addEventListener("resize", () => {
