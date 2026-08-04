@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   DECORATED_INITIAL_CATEGORY,
   DECORATED_INITIAL_COMPONENT,
+  PAGE_APPEARANCE_COMPONENT,
   PROJECT_SCHEMA,
   READER_PUBLICATION_SCHEMA
 } from "@whl/facsimile-engine";
@@ -29,6 +30,22 @@ test("store is a projection over the canonical shared engine", () => {
   assert.equal(state.context.activeScope.kind, "region");
   assert.deepEqual(store.engine.project, state.project);
   assert.equal(selectActiveLocation(state).region.id, "p0236-r002");
+});
+
+test("blank-canvas selection clearing is context-only and keeps page properties available", () => {
+  const store = setup();
+  const historyBefore = store.engine.history.snapshot();
+  assert.equal(store.dispatch("selection.clear"), true);
+
+  const state = store.getSnapshot();
+  assert.equal(state.context.activeRegionId, null);
+  assert.deepEqual(state.context.selectedRegionIds, []);
+  assert.deepEqual(state.context.activeScope, { kind: "page" });
+  assert.equal(selectActiveLocation(state).page.id, "236");
+  assert.equal(selectActiveLocation(state).region, null);
+  assert.deepEqual(store.engine.history.snapshot(), historyBefore);
+  assert.equal(store.dispatch("selection.clear"), false, "clearing an empty selection is a no-op");
+  store.destroy();
 });
 
 test("UI dispatch changes canonical annotations, publication, and authoritative history", () => {
@@ -123,5 +140,64 @@ test("text and geometry dispatch reach canonical workspace and compiled publicat
   const publication = store.compilePublication();
   assert.equal(publication.schema, READER_PUBLICATION_SCHEMA);
   assert.equal("workspace" in publication, false);
+  store.destroy();
+});
+
+test("alignment and complete transforms remain typed, undoable engine changes", () => {
+  const store = setup();
+  assert.equal(store.dispatch("region.update-style", { property: "textAlign", value: "justify" }), true);
+  assert.equal(store.dispatch("region.update-style", { property: "textAlignLast", value: "start" }), true);
+  assert.equal(store.dispatch("region.update-style", { property: "textJustify", value: "inter-word" }), true);
+  assert.equal(store.dispatch("region.update-style", { property: "hyphens", value: "auto" }), true);
+  assert.equal(store.dispatch("region.update-transform", {
+    transform: { translateX: 0.02, translateY: -0.01, scaleX: 1.25, scaleY: 0.9 }
+  }), true);
+
+  const region = selectActiveLocation(store.getSnapshot()).region;
+  assert.equal(region.style.textAlign, "justify");
+  assert.equal(region.style.textAlignLast, "start");
+  assert.equal(region.style.textJustify, "inter-word");
+  assert.equal(region.style.hyphens, "auto");
+  assert.equal(region.transform.translateX, 0.02);
+  assert.equal(region.transform.translateY, -0.01);
+  assert.equal(region.transform.scaleX, 1.25);
+  assert.equal(region.transform.scaleY, 0.9);
+  assert.equal(publishedRegion(store).components["core.typography"].textAlign, "justify");
+  assert.equal(publishedRegion(store).components["core.transform"].scaleX, 1.25);
+  assert.equal(store.engine.history.snapshot().undoLabel, "region.transform");
+  store.destroy();
+});
+
+test("page appearance edits honor book and page scope and compile on the page", () => {
+  const store = setup();
+  assert.equal(store.getSnapshot().view.books["fuchs-1542"].pages["236"].appearance.mode, "matched");
+
+  assert.equal(store.dispatch("selection.clear"), true);
+  assert.equal(store.dispatch("context.set-page-appearance-scope", { scope: "page" }), true);
+  assert.equal(store.dispatch("page.update-appearance", {
+    scope: "page", path: ["mode"], value: "solid"
+  }), true);
+  assert.equal(store.dispatch("page.update-appearance", {
+    scope: "page", path: ["color"], value: "#d2b89f"
+  }), true);
+  assert.equal(store.dispatch("page.update-appearance", {
+    scope: "page", path: ["texture", "kind"], value: "fibers"
+  }), true);
+
+  let appearance = store.getSnapshot().view.books["fuchs-1542"].pages["236"].appearance;
+  assert.equal(appearance.mode, "solid");
+  assert.equal(appearance.color, "#d2b89f");
+  assert.equal(appearance.texture.kind, "fibers");
+  const compiledPage = store.compilePublication().books["fuchs-1542"].pages["236"];
+  assert.equal(compiledPage.components[PAGE_APPEARANCE_COMPONENT].mode, "solid");
+  assert.equal(compiledPage.components[PAGE_APPEARANCE_COMPONENT].color, "#d2b89f");
+
+  assert.equal(store.dispatch("context.set-page-appearance-scope", { scope: "book" }), true);
+  assert.equal(store.dispatch("page.update-appearance", {
+    scope: "book", path: ["texture", "scale"], value: 1.4
+  }), true);
+  appearance = store.getSnapshot().view.books["fuchs-1542"].pages["236"].appearance;
+  assert.equal(appearance.texture.scale, 1.4);
+  assert.equal(store.getSnapshot().view.books["fuchs-1542"].pages["237"].appearance.texture.scale, 1.4);
   store.destroy();
 });

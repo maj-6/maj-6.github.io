@@ -1,4 +1,8 @@
-import { DECORATED_INITIAL_COMPONENT } from "@whl/facsimile-engine";
+import {
+  DECORATED_INITIAL_COMPONENT,
+  PAGE_APPEARANCE_COMPONENT,
+  evaluatePage
+} from "@whl/facsimile-engine";
 
 const DEFAULT_TYPOGRAPHY = Object.freeze({
   fontFamily: "edition",
@@ -6,8 +10,42 @@ const DEFAULT_TYPOGRAPHY = Object.freeze({
   fontWeight: 400,
   color: "#3f3026",
   lineHeight: 1.2,
-  letterSpacing: 0
+  letterSpacing: 0,
+  textAlign: "start",
+  textAlignLast: "auto",
+  textJustify: "auto",
+  hyphens: "manual"
 });
+
+export const DEFAULT_PAGE_APPEARANCE = Object.freeze({
+  mode: "matched",
+  color: "#d4bca5",
+  texture: Object.freeze({ kind: "none", strength: 0, scale: 1 })
+});
+
+function effectivePageAppearance(evaluatedPage) {
+  const authored = evaluatedPage?.components?.[PAGE_APPEARANCE_COMPONENT] || {};
+  return {
+    ...DEFAULT_PAGE_APPEARANCE,
+    ...authored,
+    texture: {
+      ...DEFAULT_PAGE_APPEARANCE.texture,
+      ...(authored.texture || {})
+    }
+  };
+}
+
+function pageAppearanceSource(evaluatedPage) {
+  const provenance = evaluatedPage?.provenance || {};
+  const fields = ["mode", "color", "texture.kind", "texture.strength", "texture.scale"];
+  const specificity = { componentDefault: 0, project: 1, book: 2, page: 3 };
+  const entries = fields
+    .map((field) => provenance[`${PAGE_APPEARANCE_COMPONENT}.${field}`])
+    .filter(Boolean);
+  return entries.sort((first, second) =>
+    (specificity[first.scope] ?? -1) - (specificity[second.scope] ?? -1)
+  ).at(-1)?.scope || "componentDefault";
+}
 
 function taxonomyView(taxonomy) {
   return {
@@ -53,6 +91,9 @@ export function createEditorViewModel(engine) {
     for (const pageId of pageOrder) {
       const page = book.pages[pageId];
       const sourcePage = document.sourceLibrary.books[bookId].pages[pageId];
+      const evaluatedPage = typeof engine.evaluatePage === "function"
+        ? engine.evaluatePage(bookId, Number(pageId))
+        : evaluatePage(document, engine.components, bookId, Number(pageId));
       const regionOrder = Object.keys(page.regions);
       const evaluatedById = new Map(regionOrder.map((regionId) => [
         regionId,
@@ -77,6 +118,13 @@ export function createEditorViewModel(engine) {
           labelIds,
           labels: labelIds.map((id) => taxonomy.labels[id]?.label || id),
           box: [...(transform.box || source.box || [0, 0, 0.1, 0.1])],
+          transform: {
+            box: [...(transform.box || source.box || [0, 0, 0.1, 0.1])],
+            translateX: transform.translateX ?? 0,
+            translateY: transform.translateY ?? 0,
+            scaleX: transform.scaleX ?? 1,
+            scaleY: transform.scaleY ?? 1
+          },
           text: { modern: content.modern || "", diplomatic: content.diplomatic || "" },
           style: typography,
           originalGlyph: source.content?.diplomatic?.trim().slice(0, 1) || "",
@@ -92,7 +140,9 @@ export function createEditorViewModel(engine) {
         id: pageId,
         number: page.page,
         label: page.displayName || sourcePage.displayName || `Page ${page.page}`,
-        paper: bookUi.pages?.[pageId]?.paper || "#d4bca5",
+        scanPaper: bookUi.pages?.[pageId]?.paper || "#cbb198",
+        appearance: effectivePageAppearance(evaluatedPage),
+        appearanceSource: pageAppearanceSource(evaluatedPage),
         regionOrder,
         regions
       };
@@ -135,6 +185,12 @@ export function authoredCapitalSetting(document, scope, bookId, pageId, regionId
   if (scope === "region") owner = book?.pages?.[String(pageId)]?.regions?.[regionId];
   const representation = owner?.components?.[DECORATED_INITIAL_COMPONENT]?.representation;
   return representation ? { representation } : null;
+}
+
+export function authoredPageAppearance(document, scope, bookId, pageId) {
+  const book = document.workspace.books[bookId];
+  const owner = scope === "book" ? book : book?.pages?.[String(pageId)];
+  return owner?.components?.[PAGE_APPEARANCE_COMPONENT] || null;
 }
 
 export function effectiveCapitalSetting(region) {

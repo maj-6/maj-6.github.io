@@ -541,6 +541,28 @@
   font: 0.72rem var(--sans);
 }
 
+.reading-settings-card input[type="color"] {
+  width: 100%;
+  min-height: 34px;
+  margin-bottom: 4px;
+  padding: 3px;
+  border: 1px solid var(--reader-border);
+  border-radius: 3px;
+  background: white;
+  cursor: pointer;
+}
+
+.reading-settings-card :is(input, select):disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.settings-divider {
+  height: 1px;
+  margin: 5px 0;
+  background: var(--reader-border);
+}
+
 .settings-reset {
   min-height: 34px;
   margin-top: 3px;
@@ -744,15 +766,20 @@
 .facsimile-page {
   --paper: #eee2c5;
   --page-ink: #29261e;
+  --texture-strength: 0.35;
   position: relative;
   aspect-ratio: var(--page-ratio);
   overflow: hidden;
   isolation: isolate;
+  background: var(--paper);
+  color: var(--page-ink);
+}
+
+.facsimile-page[data-background-mode="matched"] {
   background:
     radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.22), transparent 34%),
     radial-gradient(circle at 86% 85%, rgba(104, 79, 41, 0.05), transparent 35%),
     var(--paper);
-  color: var(--page-ink);
 }
 
 .facsimile-page::before {
@@ -761,11 +788,36 @@
   inset: 0;
   pointer-events: none;
   content: "";
-  opacity: 0.34;
+  opacity: 0;
+  background-image: none;
+  mix-blend-mode: multiply;
+}
+
+.facsimile-page[data-texture-preset="fibers"]::before {
+  opacity: var(--texture-strength);
   background-image:
     repeating-linear-gradient(87deg, transparent 0 25px, rgba(71, 53, 31, 0.018) 25px 26px),
     repeating-linear-gradient(3deg, transparent 0 31px, rgba(71, 53, 31, 0.015) 31px 32px);
-  mix-blend-mode: multiply;
+}
+
+.facsimile-page[data-texture-preset="paper"]::before {
+  opacity: var(--texture-strength);
+  background-image:
+    radial-gradient(circle at 16% 22%, rgba(74, 51, 24, 0.035) 0 0.7px, transparent 0.9px),
+    radial-gradient(circle at 72% 64%, rgba(91, 62, 29, 0.025) 0 0.55px, transparent 0.8px),
+    radial-gradient(circle at 42% 82%, rgba(255, 255, 255, 0.08) 0 0.65px, transparent 0.9px);
+  background-position: 0 0, 7px 11px, 13px 4px;
+  background-size: 19px 23px, 29px 31px, 37px 41px;
+}
+
+.facsimile-page[data-background-mode="solid"][data-texture-preset="none"] {
+  background: var(--paper);
+}
+
+.facsimile-page[data-texture-preset="none"]::before {
+  content: none;
+  opacity: 0;
+  background-image: none;
 }
 
 .facsimile-page.is-loading {
@@ -1212,25 +1264,37 @@
   position: absolute;
   z-index: 8;
   pointer-events: none;
-  outline: 2px solid #1f6f4a;
+  outline: 1px solid rgba(31, 111, 74, 0.9);
   outline-offset: 1px;
 }
 
 .editor-region-handle {
+  --editor-handle-target: 28px;
   position: absolute;
   z-index: 9;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 5px 7px;
+  display: grid;
+  width: var(--editor-handle-target);
+  min-width: var(--editor-handle-target);
+  height: var(--editor-handle-target);
+  min-height: var(--editor-handle-target);
+  padding: 0;
+  place-items: center;
   border: 1px solid rgba(255, 255, 255, 0.8);
-  border-radius: 3px;
-  background: #1f6f4a;
-  box-shadow: 0 2px 8px rgba(11, 17, 12, 0.28);
+  border-radius: 50%;
+  background: rgba(31, 111, 74, 0.84);
+  box-shadow: 0 1px 5px rgba(11, 17, 12, 0.24);
   color: white;
   cursor: grab;
-  font: 800 0.55rem/1 var(--sans);
+  font: 800 0.76rem/1 var(--sans);
+  opacity: 0.82;
   pointer-events: auto;
   touch-action: none;
+  transition: opacity 120ms ease;
+}
+
+.editor-region-handle:hover,
+.editor-region-handle:focus-visible {
+  opacity: 1;
 }
 
 .editor-move-handle {
@@ -1247,6 +1311,14 @@
 
 .editor-region-overlay.is-dragging .editor-region-handle {
   cursor: grabbing;
+}
+
+@media (pointer: coarse) {
+  .editor-region-handle {
+    --editor-handle-target: 44px;
+    font-size: 1rem;
+    opacity: 0.9;
+  }
 }
 
 @media (min-width: 851px) {

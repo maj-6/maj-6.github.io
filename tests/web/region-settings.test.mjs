@@ -129,6 +129,74 @@ test("strict validation rejects unknown values, unsafe keys, and prototype pollu
   assert.throws(() => engine.import(alteredPrototype), /plain object/);
 });
 
+test("alignment, justification, and hyphenation use strict interoperable enums", async () => {
+  const validValues = {
+    textAlign: ["start", "end", "center", "justify"],
+    textAlignLast: ["auto", "start", "end", "center", "justify"],
+    textJustify: ["auto", "inter-word", "inter-character"],
+    hyphens: ["none", "manual", "auto"]
+  };
+  const engine = settings.createEngine({ projectId, editorEnabled: true });
+  await engine.ready;
+
+  for (const [field, values] of Object.entries(validValues)) {
+    for (const value of values) {
+      assert.equal(engine.set(regionTarget, { style: { [field]: value } }), true);
+      assert.equal(engine.resolve(context).style[field], value);
+    }
+  }
+
+  const serialized = engine.export({ stringify: true, pretty: true });
+  const imported = settings.createEngine({ projectId, editorEnabled: true });
+  await imported.ready;
+  assert.equal(imported.import(serialized, { mode: "replace" }), true);
+  assert.deepEqual(imported.export(), engine.export());
+
+  const invalidValues = {
+    textAlign: ["left", "right", "inherit", "Justify", "justify;color:red", null, 1],
+    textAlignLast: ["left", "match-parent", "initial", "Center", null, 1],
+    textJustify: ["none", "distribute", "inter_word", "inherit", null, 1],
+    hyphens: ["inherit", "enabled", "Auto", "none; color:red", null, 1]
+  };
+  for (const [field, values] of Object.entries(invalidValues)) {
+    for (const value of values) {
+      const before = engine.export({ stringify: true });
+      assert.throws(
+        () => engine.set(regionTarget, { style: { [field]: value } }),
+        settings.SettingsValidationError,
+        `${field} must reject ${String(value)}`
+      );
+      assert.equal(engine.export({ stringify: true }), before, "rejected styles must not mutate the draft");
+    }
+  }
+});
+
+test("new text styles cascade independently and reveal inherited values when removed", async () => {
+  const engine = settings.createEngine({ projectId, editorEnabled: true });
+  await engine.ready;
+  const pageTarget = { scope: "page", bookId, page: 12 };
+  const pageTypeTarget = { scope: "pageRegionType", bookId, page: 12, role: "header" };
+  engine.set({ scope: "book", bookId }, { style: { textAlign: "start" } });
+  engine.set({ scope: "regionType", bookId, role: "header" }, { style: { hyphens: "auto" } });
+  engine.set(pageTarget, { style: { textAlignLast: "center" } });
+  engine.set(pageTypeTarget, { style: { textJustify: "inter-word" } });
+  engine.set(regionTarget, { style: { textAlign: "justify", hyphens: "manual" } });
+
+  assert.deepEqual(engine.resolve(context).style, {
+    textAlign: "justify",
+    hyphens: "manual",
+    textAlignLast: "center",
+    textJustify: "inter-word"
+  });
+  engine.remove(regionTarget, ["style.textAlign", "style.hyphens"]);
+  engine.remove(pageTarget, "style.textAlignLast");
+  assert.deepEqual(engine.resolve(context).style, {
+    textAlign: "start",
+    hyphens: "auto",
+    textJustify: "inter-word"
+  });
+});
+
 test("modern and diplomatic text overrides are isolated and preserve intentional emptiness", async () => {
   const base = documentWith({
     [bookId]: { pages: { "12": { regions: { "p0012-r003": { text: { modern: "Base modern", diplomatic: "Base diplomatic" } } } } } }

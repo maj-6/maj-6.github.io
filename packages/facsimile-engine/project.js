@@ -76,6 +76,7 @@ function normalizeComponentPatch(registry, value, path, scope, { overlay = false
 function normalizeRules(registry, value = {}, path, scope, options) {
   assertAllowedKeys(value, new Set(["sourceRoles", "categories", "classes"]), path);
   const result = { sourceRoles: {}, categories: {}, classes: {} };
+  const scopeSuffix = { sourceRoles: "SourceRole", categories: "Category", classes: "Class" };
   for (const kind of Object.keys(result)) {
     const rules = value[kind] ?? {};
     assertObject(rules, `${path}.${kind}`);
@@ -87,7 +88,7 @@ function normalizeRules(registry, value = {}, path, scope, options) {
           registry,
           rule.components ?? {},
           `${path}.${kind}.${selectorId}.components`,
-          scope,
+          `${scope}${scopeSuffix[kind]}`,
           options
         )
       };

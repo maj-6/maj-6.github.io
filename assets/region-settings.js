@@ -9,12 +9,19 @@
   const ROLE_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
   const FONT_TOKENS = new Set(["edition", "georgia", "palatino", "sans"]);
   const COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+  const TEXT_ALIGN_VALUES = new Set(["start", "end", "center", "justify"]);
+  const TEXT_ALIGN_LAST_VALUES = new Set(["auto", "start", "end", "center", "justify"]);
+  const TEXT_JUSTIFY_VALUES = new Set(["auto", "inter-word", "inter-character"]);
+  const HYPHEN_VALUES = new Set(["none", "manual", "auto"]);
   const TEXT_LAYERS = new Set(["modern", "diplomatic"]);
   const FIT_MODES = new Set(["scroll", "grow-width", "shrink-text", "grow-then-shrink"]);
   const WRAP_VALUES = new Set(["normal", "nowrap", "balance"]);
   const OVERFLOW_VALUES = new Set(["hidden", "auto", "scroll", "visible"]);
   const TARGET_SCOPES = new Set(["book", "regionType", "page", "pageRegionType", "region"]);
-  const STYLE_FIELDS = new Set(["fontFamily", "fontSize", "fontWeight", "color", "lineHeight", "letterSpacing"]);
+  const STYLE_FIELDS = new Set([
+    "fontFamily", "fontSize", "fontWeight", "color", "lineHeight", "letterSpacing",
+    "textAlign", "textAlignLast", "textJustify", "hyphens"
+  ]);
   const GEOMETRY_FIELDS = new Set(["box", "translateX", "translateY", "scaleX", "scaleY"]);
   const FIT_FIELDS = new Set(["mode", "wrap", "overflow", "maxWidthScale", "minFontScale"]);
   const PATCH_FIELDS = new Set(["style", "geometry", "fit", "text"]);
@@ -136,6 +143,22 @@
     }
     if (Object.hasOwn(value, "lineHeight")) result.lineHeight = assertFiniteNumber(value.lineHeight, 0.5, 4, `${path}.lineHeight`);
     if (Object.hasOwn(value, "letterSpacing")) result.letterSpacing = assertFiniteNumber(value.letterSpacing, -0.25, 1, `${path}.letterSpacing`);
+    if (Object.hasOwn(value, "textAlign")) {
+      if (!TEXT_ALIGN_VALUES.has(value.textAlign)) fail(`${path}.textAlign`, "must be start, end, center, or justify");
+      result.textAlign = value.textAlign;
+    }
+    if (Object.hasOwn(value, "textAlignLast")) {
+      if (!TEXT_ALIGN_LAST_VALUES.has(value.textAlignLast)) fail(`${path}.textAlignLast`, "must be auto, start, end, center, or justify");
+      result.textAlignLast = value.textAlignLast;
+    }
+    if (Object.hasOwn(value, "textJustify")) {
+      if (!TEXT_JUSTIFY_VALUES.has(value.textJustify)) fail(`${path}.textJustify`, "must be auto, inter-word, or inter-character");
+      result.textJustify = value.textJustify;
+    }
+    if (Object.hasOwn(value, "hyphens")) {
+      if (!HYPHEN_VALUES.has(value.hyphens)) fail(`${path}.hyphens`, "must be none, manual, or auto");
+      result.hyphens = value.hyphens;
+    }
     return result;
   }
 

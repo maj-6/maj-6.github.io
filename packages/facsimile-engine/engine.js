@@ -1,6 +1,6 @@
 import { createDefaultComponentRegistry, createDefaultRendererRegistry } from "./builtins.js";
-import { evaluateRegion } from "./cascade.js";
-import { activateRegion, createContext, deriveContext, validateContextLocation } from "./context.js";
+import { evaluatePage, evaluateRegion } from "./cascade.js";
+import { activateRegion, clearRegionSelection, createContext, deriveContext, validateContextLocation } from "./context.js";
 import { History, createChangeSet } from "./history.js";
 import { migrateRegionSettingsV1 } from "./migration.js";
 import { createDefaultOperatorRegistry, executeRegisteredOperator } from "./operators.js";
@@ -151,7 +151,8 @@ export function createFacsimileEngine(options) {
     operators: Object.freeze({ poll, execute }),
     history: Object.freeze({ undo, redo, snapshot: () => history.snapshot() }),
     modal: Object.freeze({ begin: beginModal, preview: previewModal, confirm: confirmModal, cancel: cancelModal }),
-    context: Object.freeze({ create: createContext, derive: deriveContext, activateRegion }),
+    context: Object.freeze({ create: createContext, derive: deriveContext, activateRegion, clearRegionSelection }),
+    evaluatePage(bookId, page) { return evaluatePage(project, components, bookId, page); },
     evaluateRegion(bookId, page, regionId) { return evaluateRegion(project, components, bookId, page, regionId); },
     compilePublication: compile,
     migrateV1(document) {

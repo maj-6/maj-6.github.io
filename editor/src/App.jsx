@@ -20,8 +20,11 @@ import {
   NumericInput,
   Radio,
   RadioGroup,
+  SegmentedControl,
+  Slider,
   Tag,
-  TextArea
+  TextArea,
+  Tooltip
 } from "@blueprintjs/core";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
@@ -32,6 +35,7 @@ import { createEditorStore, selectActiveLocation } from "./model/editor-store.js
 import {
   adjacentPageId,
   authoredCapitalSetting,
+  authoredPageAppearance,
   capitalPreview,
   clampContextMenuPosition,
   effectiveCapitalSetting,
@@ -48,6 +52,17 @@ const CAPITAL_MODES = [
   ["diplomatic", "Diplomatic text"],
   ["modern", "Modern text"],
   ["hidden", "Hidden"]
+];
+const TEXT_ALIGNMENTS = [
+  ["start", "align-left", "Align start"],
+  ["center", "align-center", "Align center"],
+  ["end", "align-right", "Align end"],
+  ["justify", "align-justify", "Justify"]
+];
+const TEXTURE_KINDS = [
+  ["none", "None"],
+  ["paper", "Paper grain"],
+  ["fibers", "Visible fibers"]
 ];
 
 function useEditorSnapshot() {
@@ -91,6 +106,57 @@ function CommitTextArea({ value, onCommit, ...props }) {
       onChange={(event) => setDraft(event.target.value)}
       onBlur={() => {
         if (draft !== value) onCommit(draft);
+      }}
+    />
+  );
+}
+
+function CommitNumericInput({ value, onCommit, displayScale = 1, ...props }) {
+  const displayedValue = Number(value) * displayScale;
+  const [draft, setDraft] = useState(String(Number.isFinite(displayedValue) ? displayedValue : 0));
+  useEffect(() => setDraft(String(Number.isFinite(displayedValue) ? displayedValue : 0)), [displayedValue]);
+  const commit = () => {
+    const numeric = Number(draft);
+    if (!Number.isFinite(numeric)) {
+      setDraft(String(displayedValue));
+      return;
+    }
+    const nextValue = numeric / displayScale;
+    if (nextValue !== value) onCommit(nextValue);
+  };
+  return (
+    <NumericInput
+      {...props}
+      asyncControl
+      value={draft}
+      onValueChange={(_numeric, valueAsString) => setDraft(valueAsString)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commit();
+          event.currentTarget.blur();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          setDraft(String(displayedValue));
+          event.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
+function CommitSlider({ value, onCommit, ...props }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <Slider
+      {...props}
+      value={draft}
+      onChange={setDraft}
+      onRelease={(nextValue) => {
+        setDraft(nextValue);
+        if (nextValue !== value) onCommit(nextValue);
       }}
     />
   );
@@ -176,30 +242,37 @@ function ToolRail({ state, dispatch }) {
   const tools = [
     ["select", "selection", "Select"],
     ["move", "move", "Move"],
-    ["resize", "widget", "Resize"]
+    ["resize", "widget", "Scale region"]
   ];
   return (
     <div className="tool-rail" aria-label="Viewport tools">
       {tools.map(([tool, icon, label]) => (
-        <Button
-          key={tool}
-          icon={icon}
-          aria-label={label}
-          title={label}
-          active={state.context.activeToolId === tool}
-          onClick={() => dispatch("context.set-tool", { tool })}
-        />
+        <Tooltip key={tool} content={label} placement="right">
+          <Button
+            icon={icon}
+            aria-label={label}
+            aria-pressed={state.context.activeToolId === tool}
+            size="small"
+            variant="minimal"
+            active={state.context.activeToolId === tool}
+            onClick={() => dispatch("context.set-tool", { tool })}
+          />
+        </Tooltip>
       ))}
       <Divider />
-      <Button
-        icon="edit"
-        aria-label="Text edit mode"
-        title="Text edit mode"
-        active={state.context.mode === "TEXT"}
-        onClick={() => dispatch("context.set-mode", {
-          mode: state.context.mode === "TEXT" ? "OBJECT" : "TEXT"
-        })}
-      />
+      <Tooltip content="Text edit mode" placement="right">
+        <Button
+          icon="edit"
+          aria-label="Text edit mode"
+          aria-pressed={state.context.mode === "TEXT"}
+          size="small"
+          variant="minimal"
+          active={state.context.mode === "TEXT"}
+          onClick={() => dispatch("context.set-mode", {
+            mode: state.context.mode === "TEXT" ? "OBJECT" : "TEXT"
+          })}
+        />
+      </Tooltip>
     </div>
   );
 }
@@ -269,25 +342,46 @@ function Outliner({ state, location, dispatch }) {
 }
 
 function regionPosition(region) {
-  const [left, top, right, bottom] = region.box;
+  const transform = region.transform || {};
+  const [left, top, right, bottom] = transform.box || region.box;
+  const translateX = transform.translateX ?? 0;
+  const translateY = transform.translateY ?? 0;
+  const scaleX = transform.scaleX ?? 1;
+  const scaleY = transform.scaleY ?? 1;
+  const width = (right - left) * scaleX;
+  const height = (bottom - top) * scaleY;
+  const centerX = (left + right) / 2 + translateX;
+  const centerY = (top + bottom) / 2 + translateY;
   return {
-    left: `${left * 100}%`,
-    top: `${top * 100}%`,
-    width: `${(right - left) * 100}%`,
-    height: `${(bottom - top) * 100}%`
+    left: `${(centerX - width / 2) * 100}%`,
+    top: `${(centerY - height / 2) * 100}%`,
+    width: `${width * 100}%`,
+    height: `${height * 100}%`
   };
 }
 
 function PageSurface({ surface, state, location, onOpenMenu, dispatch }) {
   const { book, page } = location;
+  const facsimile = surface === "facsimile";
+  const appearance = page.appearance;
+  const pageStyle = facsimile ? {
+    "--paper": appearance.color,
+    "--page-texture-strength": appearance.texture.strength,
+    "--page-texture-scale": appearance.texture.scale
+  } : { "--paper": page.scanPaper };
   return (
     <section className="page-column" aria-label={surface === "scan" ? "Original scan" : "Facsimile preview"}>
       <div className="surface-label">
         <span>{surface === "scan" ? "Original scan" : "Facsimile"}</span>
         <Tag minimal>{surface === "scan" ? "source" : state.context.activeEdition}</Tag>
       </div>
-      <div className={`page-sheet ${surface}`} style={{ "--paper": page.paper }}>
-        <div className="paper-grain" aria-hidden="true" />
+      <div
+        className={`page-sheet ${surface}`}
+        style={pageStyle}
+        data-background-mode={facsimile ? appearance.mode : "source"}
+        data-texture={facsimile ? appearance.texture.kind : "none"}
+      >
+        {facsimile && <div className="paper-grain" aria-hidden="true" />}
         <div className="botanical-ghost" aria-hidden="true">
           <span className="stem" /><span className="leaf leaf-one" /><span className="leaf leaf-two" />
           <span className="leaf leaf-three" /><span className="flower">✣</span>
@@ -307,6 +401,7 @@ function PageSurface({ surface, state, location, onOpenMenu, dispatch }) {
             <button
               type="button"
               key={regionId}
+              data-region-id={regionId}
               className={className}
               style={{
                 ...regionPosition(region),
@@ -314,7 +409,11 @@ function PageSurface({ surface, state, location, onOpenMenu, dispatch }) {
                 "--region-weight": region.style.fontWeight,
                 "--region-leading": region.style.lineHeight,
                 "--region-tracking": `${region.style.letterSpacing}em`,
-                "--region-scale": region.style.fontSize
+                "--region-scale": region.style.fontSize,
+                "--region-text-align": region.style.textAlign,
+                "--region-text-align-last": region.style.textAlignLast,
+                "--region-text-justify": region.style.textJustify,
+                "--region-hyphens": region.style.hyphens
               }}
               aria-label={`${regionDisplayName(region)}, ${region.categoryId}`}
               aria-pressed={active}
@@ -327,7 +426,11 @@ function PageSurface({ surface, state, location, onOpenMenu, dispatch }) {
               }}
             >
               <span className="region-content">{preview.text || (surface === "facsimile" ? "Hidden" : "")}</span>
-              {active && <span className="resize-corner" aria-hidden="true" />}
+              {active && facsimile && state.context.mode === "TRANSFORM" && (
+                <span className={`transform-affordance is-${state.context.activeToolId}`} aria-hidden="true">
+                  <Icon icon={state.context.activeToolId === "move" ? "move" : "widget"} size={10} />
+                </span>
+              )}
             </button>
           );
         })}
@@ -338,6 +441,10 @@ function PageSurface({ surface, state, location, onOpenMenu, dispatch }) {
 }
 
 function Viewport({ state, location, dispatch, onOpenMenu }) {
+  const clearBlankSelection = (event) => {
+    if (state.context.selectedRegionIds.length === 0 || event.target.closest?.("[data-region-id]")) return;
+    dispatch("selection.clear");
+  };
   return (
     <main className="viewport-panel" aria-label="Adjacent page comparison">
       <div className="viewport-toolbar">
@@ -366,7 +473,7 @@ function Viewport({ state, location, dispatch, onOpenMenu }) {
         </div>
       </div>
       <ToolRail state={state} dispatch={dispatch} />
-      <div className="page-stage">
+      <div className="page-stage" onClick={clearBlankSelection} aria-label="Page canvas; click empty space to clear region selection">
         <div className="page-pair">
           <PageSurface surface="scan" state={state} location={location} dispatch={dispatch} onOpenMenu={onOpenMenu} />
           <PageSurface surface="facsimile" state={state} location={location} dispatch={dispatch} onOpenMenu={onOpenMenu} />
@@ -550,9 +657,339 @@ function CapitalProperties({ state, location, region, dispatch }) {
   );
 }
 
+function AlignmentControls({ region, dispatch }) {
+  const alignmentOptions = TEXT_ALIGNMENTS.map(([value, icon, label]) => ({
+    value,
+    icon,
+    label: <span className="sr-only">{label}</span>
+  }));
+  return (
+    <>
+      <FormGroup label="Alignment" labelFor="region-text-alignment">
+        <SegmentedControl
+          id="region-text-alignment"
+          className="alignment-control"
+          fill
+          size="small"
+          aria-label="Text alignment"
+          value={region.style.textAlign}
+          options={alignmentOptions}
+          onValueChange={(value) => dispatch("region.update-style", { property: "textAlign", value })}
+        />
+      </FormGroup>
+      {region.style.textAlign === "justify" && (
+        <div className="two-column-fields justification-fields">
+          <FormGroup label="Justification" labelFor="region-text-justify">
+            <HTMLSelect
+              id="region-text-justify"
+              fill
+              value={region.style.textJustify}
+              onChange={(event) => dispatch("region.update-style", { property: "textJustify", value: event.target.value })}
+              options={[
+                { label: "Automatic", value: "auto" },
+                { label: "Between words", value: "inter-word" },
+                { label: "Between characters", value: "inter-character" }
+              ]}
+            />
+          </FormGroup>
+          <FormGroup label="Last line" labelFor="region-text-align-last">
+            <HTMLSelect
+              id="region-text-align-last"
+              fill
+              value={region.style.textAlignLast}
+              onChange={(event) => dispatch("region.update-style", { property: "textAlignLast", value: event.target.value })}
+              options={[
+                { label: "Automatic", value: "auto" },
+                { label: "Start", value: "start" },
+                { label: "Center", value: "center" },
+                { label: "End", value: "end" },
+                { label: "Justified", value: "justify" }
+              ]}
+            />
+          </FormGroup>
+          <FormGroup label="Hyphenation" labelFor="region-hyphens">
+            <HTMLSelect
+              id="region-hyphens"
+              fill
+              value={region.style.hyphens}
+              onChange={(event) => dispatch("region.update-style", { property: "hyphens", value: event.target.value })}
+              options={[
+                { label: "Manual", value: "manual" },
+                { label: "Automatic", value: "auto" },
+                { label: "None", value: "none" }
+              ]}
+            />
+          </FormGroup>
+        </div>
+      )}
+    </>
+  );
+}
+
+function TransformProperties({ region, dispatch }) {
+  const transform = region.transform || {
+    box: region.box,
+    translateX: 0,
+    translateY: 0,
+    scaleX: 1,
+    scaleY: 1
+  };
+  const updateTransform = (property, value) => dispatch("region.update-transform", {
+    transform: { [property]: value }
+  });
+  const updateBound = (index, value) => {
+    const box = [...transform.box];
+    const epsilon = 0.001;
+    if (index === 0) box[index] = Math.min(value, box[2] - epsilon);
+    else if (index === 1) box[index] = Math.min(value, box[3] - epsilon);
+    else if (index === 2) box[index] = Math.max(value, box[0] + epsilon);
+    else box[index] = Math.max(value, box[1] + epsilon);
+    dispatch("region.update-box", { box });
+  };
+  return (
+    <div className="transform-controls">
+      <div className="transform-row">
+        <div className="transform-row-title"><Icon icon="move" size={12} /><span>Move</span></div>
+        <CommitNumericInput
+          aria-label="Horizontal region offset, percent of page"
+          value={transform.translateX}
+          displayScale={100}
+          min={-100}
+          max={100}
+          stepSize={0.5}
+          minorStepSize={0.1}
+          majorStepSize={5}
+          buttonPosition="none"
+          clampValueOnBlur
+          selectAllOnFocus
+          size="small"
+          onCommit={(value) => updateTransform("translateX", value)}
+        />
+        <span className="transform-axis" aria-hidden="true">X%</span>
+        <CommitNumericInput
+          aria-label="Vertical region offset, percent of page"
+          value={transform.translateY}
+          displayScale={100}
+          min={-100}
+          max={100}
+          stepSize={0.5}
+          minorStepSize={0.1}
+          majorStepSize={5}
+          buttonPosition="none"
+          clampValueOnBlur
+          selectAllOnFocus
+          size="small"
+          onCommit={(value) => updateTransform("translateY", value)}
+        />
+        <span className="transform-axis" aria-hidden="true">Y%</span>
+      </div>
+      <div className="transform-row">
+        <div className="transform-row-title"><Icon icon="widget" size={12} /><span>Scale</span></div>
+        <CommitNumericInput
+          aria-label="Horizontal region scale, percent"
+          value={transform.scaleX}
+          displayScale={100}
+          min={25}
+          max={400}
+          stepSize={1}
+          minorStepSize={0.5}
+          majorStepSize={10}
+          buttonPosition="none"
+          clampValueOnBlur
+          selectAllOnFocus
+          size="small"
+          onCommit={(value) => updateTransform("scaleX", value)}
+        />
+        <span className="transform-axis" aria-hidden="true">X%</span>
+        <CommitNumericInput
+          aria-label="Vertical region scale, percent"
+          value={transform.scaleY}
+          displayScale={100}
+          min={25}
+          max={400}
+          stepSize={1}
+          minorStepSize={0.5}
+          majorStepSize={10}
+          buttonPosition="none"
+          clampValueOnBlur
+          selectAllOnFocus
+          size="small"
+          onCommit={(value) => updateTransform("scaleY", value)}
+        />
+        <span className="transform-axis" aria-hidden="true">Y%</span>
+      </div>
+      <details className="exact-bounds">
+        <summary>Exact bounds</summary>
+        <div className="coordinate-grid">
+          {transform.box.map((value, index) => {
+            const labels = ["Left", "Top", "Right", "Bottom"];
+            return (
+              <FormGroup key={labels[index]} label={`${labels[index]} (%)`}>
+                <CommitNumericInput
+                  aria-label={`${labels[index]} bound, percent of page`}
+                  fill
+                  value={value}
+                  displayScale={100}
+                  min={0}
+                  max={100}
+                  stepSize={0.5}
+                  minorStepSize={0.1}
+                  majorStepSize={5}
+                  clampValueOnBlur
+                  selectAllOnFocus
+                  size="small"
+                  onCommit={(nextValue) => updateBound(index, nextValue)}
+                />
+              </FormGroup>
+            );
+          })}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function PageAppearanceProperties({ state, location, dispatch }) {
+  const scope = ["book", "page"].includes(state.context.activeScope.kind)
+    ? state.context.activeScope.kind
+    : "page";
+  const appearance = location.page.appearance;
+  const authored = authoredPageAppearance(
+    state.project,
+    scope,
+    location.book.id,
+    location.page.id
+  );
+  const update = (path, value) => dispatch("page.update-appearance", { scope, path, value });
+  return (
+    <>
+      <FormGroup label="Apply background to">
+        <SegmentedControl
+          fill
+          size="small"
+          aria-label="Page appearance scope"
+          value={scope}
+          options={[
+            { label: "Book default", value: "book", icon: "book" },
+            { label: `Page ${location.page.number}`, value: "page", icon: "document" }
+          ]}
+          onValueChange={(value) => dispatch("context.set-page-appearance-scope", { scope: value })}
+        />
+      </FormGroup>
+      <div className="inheritance-line page-appearance-source">
+        <Tag minimal intent={authored ? "primary" : "none"}>{authored ? `${scope} override` : "inherited"}</Tag>
+        <span>Effective source: {location.page.appearanceSource}</span>
+      </div>
+      <FormGroup label="Background mode">
+        <SegmentedControl
+          fill
+          size="small"
+          aria-label="Page background mode"
+          value={appearance.mode}
+          options={[
+            { label: "Matched scan", value: "matched", icon: "comparison" },
+            { label: "Solid color", value: "solid", icon: "tint" }
+          ]}
+          onValueChange={(value) => update(["mode"], value)}
+        />
+      </FormGroup>
+      <FormGroup
+        label="Paper color"
+        helperText={appearance.mode === "matched" ? "Fallback and preview color for the scan-matched surface." : "Solid facsimile background color."}
+      >
+        <div className="page-color-control">
+          <input
+            type="color"
+            aria-label="Choose page background color"
+            value={appearance.color}
+            onChange={(event) => update(["color"], event.target.value)}
+          />
+          <CommitInput
+            aria-label="Page background hexadecimal color"
+            value={appearance.color}
+            onCommit={(value) => update(["color"], value)}
+          />
+        </div>
+      </FormGroup>
+      <FormGroup label="Texture">
+        <RadioGroup
+          className="texture-options"
+          aria-label="Page texture"
+          selectedValue={appearance.texture.kind}
+          onChange={(event) => update(["texture", "kind"], event.currentTarget.value)}
+        >
+          {TEXTURE_KINDS.map(([kind, label]) => (
+            <Radio
+              key={kind}
+              value={kind}
+              labelElement={(
+                <span className="texture-option-label">
+                  <span className="texture-swatch" data-texture={kind} aria-hidden="true" />
+                  <span>{label}</span>
+                </span>
+              )}
+            />
+          ))}
+        </RadioGroup>
+      </FormGroup>
+      <FormGroup label={`Texture strength · ${Math.round(appearance.texture.strength * 100)}%`}>
+        <CommitSlider
+          min={0}
+          max={1}
+          stepSize={0.05}
+          labelStepSize={0.25}
+          disabled={appearance.texture.kind === "none"}
+          value={appearance.texture.strength}
+          handleHtmlProps={{ "aria-label": "Page texture strength" }}
+          labelRenderer={(value) => `${Math.round(value * 100)}%`}
+          onCommit={(value) => update(["texture", "strength"], value)}
+        />
+      </FormGroup>
+      <FormGroup label={`Texture scale · ${appearance.texture.scale.toFixed(1)}×`}>
+        <CommitSlider
+          min={0.5}
+          max={3}
+          stepSize={0.1}
+          labelStepSize={0.5}
+          disabled={appearance.texture.kind === "none"}
+          value={appearance.texture.scale}
+          handleHtmlProps={{ "aria-label": "Page texture scale" }}
+          labelRenderer={(value) => `${value.toFixed(1)}×`}
+          onCommit={(value) => update(["texture", "scale"], value)}
+        />
+      </FormGroup>
+      <Callout compact icon="eye-open">
+        Background edits preview on the facsimile only. The original scan is never recolored.
+      </Callout>
+    </>
+  );
+}
+
+function PagePropertiesPanel({ state, location, dispatch, headingRef }) {
+  return (
+    <aside className="properties panel" aria-labelledby="page-properties-heading">
+      <div className="panel-title-row sticky">
+        <div>
+          <div className="section-kicker">Active page</div>
+          <h2 id="page-properties-heading" ref={headingRef} tabIndex="-1">Page properties</h2>
+        </div>
+      </div>
+      <div className="properties-scroll">
+        <PropertySection title="Page appearance" icon="tint">
+          <PageAppearanceProperties state={state} location={location} dispatch={dispatch} />
+        </PropertySection>
+        <PropertySection title="Page information" icon="document" defaultOpen={false}>
+          <div className="qa-row"><span>Label</span><span>{location.page.label}</span></div>
+          <div className="qa-row"><span>Regions</span><Tag minimal>{location.page.regionOrder.length}</Tag></div>
+        </PropertySection>
+      </div>
+    </aside>
+  );
+}
+
 function PropertiesPanel({ state, location, dispatch, headingRef }) {
   const region = location.region;
-  if (!region) return <aside className="properties panel"><Callout>Select a region to edit its properties.</Callout></aside>;
+  if (!region) return <PagePropertiesPanel state={state} location={location} dispatch={dispatch} headingRef={headingRef} />;
   const illuminated = isIlluminatedRegion(state.view, region);
   return (
     <aside className="properties panel" aria-labelledby="region-properties-heading">
@@ -668,32 +1105,11 @@ function PropertiesPanel({ state, location, dispatch, headingRef }) {
               onChange={(event) => dispatch("region.update-style", { property: "color", value: event.target.value })}
             />
           </FormGroup>
+          <AlignmentControls region={region} dispatch={dispatch} />
         </PropertySection>
 
         <PropertySection title="Transform" icon="widget">
-          <div className="coordinate-grid">
-            {region.box.map((value, index) => {
-              const labels = ["Left", "Top", "Right", "Bottom"];
-              return (
-                <FormGroup key={labels[index]} label={labels[index]}>
-                  <NumericInput
-                    fill
-                    min={0}
-                    max={1}
-                    stepSize={0.005}
-                    minorStepSize={0.001}
-                    value={value}
-                    onValueChange={(nextValue) => {
-                      if (!Number.isFinite(nextValue)) return;
-                      const box = [...region.box];
-                      box[index] = nextValue;
-                      dispatch("region.update-box", { box });
-                    }}
-                  />
-                </FormGroup>
-              );
-            })}
-          </div>
+          <TransformProperties region={region} dispatch={dispatch} />
         </PropertySection>
 
         {illuminated && (
@@ -854,10 +1270,21 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (event) => {
       const target = event.target;
-      const ownsTextUndo = target instanceof HTMLInputElement
+      const ownsKeyboardInput = target instanceof HTMLInputElement
         || target instanceof HTMLTextAreaElement
         || target?.isContentEditable;
-      if (ownsTextUndo || !(event.ctrlKey || event.metaKey) || event.altKey) return;
+      if (
+        event.key === "Escape"
+        && !event.defaultPrevented
+        && !contextMenu
+        && !ownsKeyboardInput
+        && state.context.selectedRegionIds.length > 0
+      ) {
+        event.preventDefault();
+        dispatch("selection.clear");
+        return;
+      }
+      if (ownsKeyboardInput || !(event.ctrlKey || event.metaKey) || event.altKey) return;
       if (event.key.toLowerCase() === "z") {
         event.preventDefault();
         dispatch(event.shiftKey ? "history.redo" : "history.undo");
@@ -868,7 +1295,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [dispatch]);
+  }, [contextMenu, dispatch, state.context.selectedRegionIds.length]);
 
   const openContextMenu = useCallback((event, regionId, keyboard = false) => {
     event.preventDefault();

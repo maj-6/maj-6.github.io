@@ -1,6 +1,30 @@
 import { RegistryError } from "./errors.js";
 import { assertSafeId, clone, deepMerge, immutableClone, isPlainObject } from "./utils.js";
 
+const COMPONENT_TARGET_KINDS = new Set(["region", "page"]);
+const REGION_COMPONENT_SCOPES = Object.freeze([
+  "project", "projectSourceRole", "projectCategory", "projectClass",
+  "category", "class",
+  "book", "bookSourceRole", "bookCategory", "bookClass",
+  "page", "pageSourceRole", "pageCategory", "pageClass",
+  "region"
+]);
+const PAGE_COMPONENT_SCOPES = Object.freeze(["project", "book", "page"]);
+
+function normalizeStringSet(value, fallback, allowed, path) {
+  const items = value === undefined ? [...fallback] : value;
+  if (!Array.isArray(items) || !items.length) throw new RegistryError(`${path} must be a non-empty array`);
+  const result = [];
+  for (const item of items) {
+    if (typeof item !== "string" || (allowed && !allowed.has(item))) {
+      throw new RegistryError(`${path} contains unsupported value ${String(item)}`);
+    }
+    if (result.includes(item)) throw new RegistryError(`${path} must not contain duplicates`);
+    result.push(item);
+  }
+  return Object.freeze(result);
+}
+
 function validateDefinition(definition, kind) {
   if (!isPlainObject(definition)) throw new RegistryError(`${kind} definition must be a plain object`);
   assertSafeId(definition.id, `${kind}.id`);
@@ -27,12 +51,29 @@ export class ComponentRegistry {
       throw new RegistryError(`reader-safe component ${definition.id} must provide serializeForReader(value)`);
     }
     if (this.#definitions.has(definition.id)) throw new RegistryError(`component ${definition.id} is already registered`);
+    const targetKinds = normalizeStringSet(
+      definition.targetKinds,
+      ["region"],
+      COMPONENT_TARGET_KINDS,
+      `component ${definition.id} targetKinds`
+    );
+    const allowedScopes = targetKinds.includes("region")
+      ? REGION_COMPONENT_SCOPES
+      : PAGE_COMPONENT_SCOPES;
+    const supportedScopes = normalizeStringSet(
+      definition.supportedScopes,
+      allowedScopes,
+      new Set(allowedScopes),
+      `component ${definition.id} supportedScopes`
+    );
     const normalized = Object.freeze({
       readerSafe: false,
       defaults: {},
       merge: deepMerge,
       ...definition,
-      defaults: clone(definition.defaults || {})
+      defaults: immutableClone(definition.defaults || {}),
+      targetKinds,
+      supportedScopes
     });
     this.#definitions.set(normalized.id, normalized);
     return this;
@@ -50,6 +91,12 @@ export class ComponentRegistry {
 
   normalize(id, value, metadata = {}) {
     const definition = this.get(id);
+    if (metadata.scope && !definition.supportedScopes.includes(metadata.scope)) {
+      throw new RegistryError(`component ${id} does not support scope ${metadata.scope}`, {
+        componentId: id,
+        scope: metadata.scope
+      });
+    }
     const normalized = definition.validate(clone(value), immutableClone(metadata));
     if (!isPlainObject(normalized)) throw new RegistryError(`component ${id} validator must return a plain object`);
     return clone(normalized);

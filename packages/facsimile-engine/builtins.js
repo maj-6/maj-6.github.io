@@ -16,6 +16,7 @@ export const DECORATED_INITIAL_EXTENSION = "whl.decorated-initial";
 export const DECORATED_INITIAL_CATEGORY = "visual.ornament.decorated-initial";
 export const DECORATED_INITIAL_COMPONENT = "render.decoratedInitial";
 export const DECORATED_INITIAL_RENDERER = "decorated-initial";
+export const PAGE_APPEARANCE_COMPONENT = "core.pageAppearance";
 // Source-compatible names for the short-lived v2 prototype. New documents are
 // always normalized to the historically broader decorated-initial vocabulary.
 export const ILLUMINATED_CAPITAL_EXTENSION = DECORATED_INITIAL_EXTENSION;
@@ -26,10 +27,17 @@ export const ILLUMINATED_CAPITAL_RENDERER = DECORATED_INITIAL_RENDERER;
 const COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 const FONT_TOKENS = new Set(["edition", "georgia", "palatino", "sans"]);
 const REPRESENTATIONS = new Set(["auto", "original", "modern", "diplomatic", "hidden"]);
+const TEXT_ALIGNMENTS = new Set(["start", "center", "end", "justify"]);
+const LAST_LINE_ALIGNMENTS = new Set(["auto", "start", "center", "end", "justify"]);
+const TEXT_JUSTIFICATION_MODES = new Set(["auto", "inter-word", "inter-character"]);
+const HYPHENATION_MODES = new Set(["none", "manual", "auto"]);
 const serializeJsonForReader = (value) => clone(value);
 
 function normalizeTypography(value, metadata) {
-  const allowed = new Set(["fontFamily", "fontSize", "fontWeight", "color", "lineHeight", "letterSpacing"]);
+  const allowed = new Set([
+    "fontFamily", "fontSize", "fontWeight", "color", "lineHeight", "letterSpacing",
+    "textAlign", "textAlignLast", "textJustify", "hyphens"
+  ]);
   assertAllowedKeys(value, allowed, metadata.path || "core.typography");
   const path = metadata.path || "core.typography";
   const result = {};
@@ -47,6 +55,58 @@ function normalizeTypography(value, metadata) {
   }
   if (Object.hasOwn(value, "lineHeight")) result.lineHeight = assertFiniteNumber(value.lineHeight, 0.5, 4, `${path}.lineHeight`);
   if (Object.hasOwn(value, "letterSpacing")) result.letterSpacing = assertFiniteNumber(value.letterSpacing, -0.25, 1, `${path}.letterSpacing`);
+  if (Object.hasOwn(value, "textAlign")) {
+    if (!TEXT_ALIGNMENTS.has(value.textAlign)) fail(`${path}.textAlign`, "has an unsupported alignment");
+    result.textAlign = value.textAlign;
+  }
+  if (Object.hasOwn(value, "textAlignLast")) {
+    if (!LAST_LINE_ALIGNMENTS.has(value.textAlignLast)) fail(`${path}.textAlignLast`, "has an unsupported last-line alignment");
+    result.textAlignLast = value.textAlignLast;
+  }
+  if (Object.hasOwn(value, "textJustify")) {
+    if (!TEXT_JUSTIFICATION_MODES.has(value.textJustify)) fail(`${path}.textJustify`, "has an unsupported justification mode");
+    result.textJustify = value.textJustify;
+  }
+  if (Object.hasOwn(value, "hyphens")) {
+    if (!HYPHENATION_MODES.has(value.hyphens)) fail(`${path}.hyphens`, "has an unsupported hyphenation mode");
+    result.hyphens = value.hyphens;
+  }
+  return result;
+}
+
+function normalizePageAppearance(value, metadata) {
+  const path = metadata.path || PAGE_APPEARANCE_COMPONENT;
+  assertObject(value, path);
+  assertAllowedKeys(value, new Set(["mode", "color", "texture"]), path);
+  const result = {};
+  if (Object.hasOwn(value, "mode")) {
+    if (!["matched", "solid"].includes(value.mode)) fail(`${path}.mode`, "must be matched or solid");
+    result.mode = value.mode;
+  }
+  if (Object.hasOwn(value, "color")) {
+    if (typeof value.color !== "string" || !COLOR_PATTERN.test(value.color)) {
+      fail(`${path}.color`, "must be an opaque hexadecimal color");
+    }
+    result.color = value.color.toLowerCase();
+  }
+  if (Object.hasOwn(value, "texture")) {
+    const texturePath = `${path}.texture`;
+    assertObject(value.texture, texturePath);
+    assertAllowedKeys(value.texture, new Set(["kind", "strength", "scale"]), texturePath);
+    result.texture = {};
+    if (Object.hasOwn(value.texture, "kind")) {
+      if (!["none", "paper", "fibers"].includes(value.texture.kind)) {
+        fail(`${texturePath}.kind`, "must be none, paper, or fibers");
+      }
+      result.texture.kind = value.texture.kind;
+    }
+    if (Object.hasOwn(value.texture, "strength")) {
+      result.texture.strength = assertFiniteNumber(value.texture.strength, 0, 1, `${texturePath}.strength`);
+    }
+    if (Object.hasOwn(value.texture, "scale")) {
+      result.texture.scale = assertFiniteNumber(value.texture.scale, 0.5, 3, `${texturePath}.scale`);
+    }
+  }
   return result;
 }
 
@@ -292,6 +352,21 @@ function normalizeVisibility(value, metadata) {
 
 export function createDefaultComponentRegistry() {
   return new ComponentRegistry()
+    .register({
+      id: PAGE_APPEARANCE_COMPONENT,
+      version: 1,
+      extensionId: CORE_EXTENSION,
+      readerSafe: true,
+      targetKinds: ["page"],
+      supportedScopes: ["project", "book", "page"],
+      serializeForReader: serializeJsonForReader,
+      defaults: {
+        mode: "matched",
+        color: "#eee2c5",
+        texture: { kind: "paper", strength: 0.28, scale: 1 }
+      },
+      validate: normalizePageAppearance
+    })
     .register({
       id: "core.typography",
       version: 1,

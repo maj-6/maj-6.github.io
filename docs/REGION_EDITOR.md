@@ -74,9 +74,19 @@ normalized box or constrained layout scale. Direct region geometry wins over
 broader scaling rules.
 
 The reader's personal Display controls are not authored settings. Text size
-and line-height preferences are applied as final multipliers, and page zoom
-scales the page and its typography exactly once. Thus an approved region style
-survives page turns while reader accessibility preferences remain reversible.
+and line-height preferences are applied as final multipliers, page zoom scales
+the page and its typography exactly once, and `edition`, `start`, or `justify`
+can be selected as a final alignment preference. `edition` preserves resolved
+region and role alignment. Thus an approved region style survives page turns
+while reader accessibility preferences remain reversible.
+
+Display also offers a page background matched to the scan's sampled paper or a
+validated six-digit solid color. The optional `none`, `paper`, and `fibers`
+textures are fixed procedural CSS presets with a bounded strength; they never
+accept a URL or arbitrary CSS. `solid` plus `none` is a genuinely flat fill.
+All display choices persist locally across page turns and reloads. Whenever the
+effective paper changes, the reader derives a contrast-safe default ink and
+corrects an authored region color only when it would otherwise be unreadable.
 
 The canonical published document is
 [`data/region-settings.json`](../data/region-settings.json). It is safe to keep
@@ -134,8 +144,8 @@ The version 1 document shape is:
 
 A patch may contain these property groups:
 
-- `style`: `fontFamily`, `fontSize`, `fontWeight`, `color`, `lineHeight`, and
-  `letterSpacing`;
+- `style`: `fontFamily`, `fontSize`, `fontWeight`, `color`, `lineHeight`,
+  `letterSpacing`, `textAlign`, `textAlignLast`, `textJustify`, and `hyphens`;
 - `geometry`: `translateX`, `translateY`, `scaleX`, and `scaleY`; an exact
   normalized `box` is valid only for an individual region;
 - `fit`: `mode`, `wrap`, `overflow`, `maxWidthScale`, and `minFontScale`;
@@ -152,7 +162,8 @@ color.
 
 The engine accepts a fixed property vocabulary rather than arbitrary CSS:
 font family, font size, font weight, font color, line height, character
-spacing, normalized geometry, and constrained layout scaling. It rejects
+spacing, alignment, justification, hyphenation, normalized geometry, and
+constrained layout scaling. It rejects
 non-finite or out-of-range numbers, invalid boxes, unsupported font tokens,
 unsafe colors, unknown properties, malformed book/page/region selectors,
 prototype-pollution keys, and oversized text or documents. Invalid settings
@@ -165,6 +176,10 @@ Version 1 validates the following values:
   0.5–4; `fontWeight` is an integer from 100–900;
 - `color` is opaque `#RGB` or `#RRGGBB`; `lineHeight` is
   0.5–4; `letterSpacing` is −0.25–1;
+- `textAlign` is `start`, `end`, `center`, or `justify`; `textAlignLast` is
+  `auto`, `start`, `end`, `center`, or `justify`;
+- `textJustify` is `auto`, `inter-word`, or `inter-character`; `hyphens` is
+  `none`, `manual`, or `auto`;
 - normalized boxes contain four 0–1 coordinates and have positive area;
   `translateX`/`translateY` are −1–1 and `scaleX`/`scaleY` are 0.25–4;
 - fit mode is `scroll`, `grow-width`, `shrink-text`, or `grow-then-shrink`;
@@ -180,6 +195,9 @@ textbox only for the selected text region, and paste/import paths remove markup
 before validation. Text for the modern and diplomatic layers is stored
 separately. Text corrections should be reviewed against the scan, and their
 region IDs should be revalidated whenever OCR geometry is regenerated.
+When a resolved or personal alignment is `justify`, the renderer permits the
+OCR's soft scan-line breaks to reflow inside the region. The stored text and
+intentional paragraph characters are not rewritten.
 
 ## Drafts, import, and export
 
@@ -285,6 +303,11 @@ controls in addition to pointer handles. Only the active text region becomes
 editable, with an accessible region/type label and multiline semantics.
 Escape cancels a pending text edit and Ctrl/Cmd+Enter commits it. IME
 composition must finish before committing.
+
+Clicking blank space on the facsimile clears the region selection without
+closing the editor. Pointer handles use compact marks for precise pointers and
+44-pixel targets for coarse pointers; their accessible names, focus outlines,
+and arrow-key movement and resizing remain available in both cases.
 
 Arrow keys inside a range, select, text field, editable region, or pannable
 spread retain their native purpose. When focus is on the Display summary,

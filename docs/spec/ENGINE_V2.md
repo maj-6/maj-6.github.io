@@ -165,6 +165,7 @@ reader serializer, and optional inspector metadata.
 
 Initial component IDs:
 
+- `core.pageAppearance`
 - `core.typography`
 - `core.transform`
 - `core.textLayout`
@@ -179,6 +180,8 @@ components.register({
   id: "core.typography",
   version: 1,
   readerSafe: true,
+  targetKinds: ["region"],
+  supportedScopes: ["project", "book", "page", "region"],
   defaults: {},
   validate(value, context) {},
   merge(base, override) {},
@@ -207,6 +210,27 @@ The project declares `requiredExtensions` and `optionalExtensions`. Unknown
 required extensions fail validation and compilation. Unknown optional
 extension blocks round-trip canonically but are never executed or emitted to a
 reader unless an installed serializer marks them reader-safe.
+
+Every component declares the target kind it evaluates (`region` or `page`)
+and the authoring scopes at which it is legal. Region components may cascade
+through project, taxonomy, selector-rule, book, page, and exact-region scopes.
+Page components use a separate project to book to page cascade and must not be
+placed in category/class rules or exact regions. The initial
+`core.pageAppearance` page component is:
+
+```json
+{
+  "mode": "matched",
+  "color": "#eee2c5",
+  "texture": { "kind": "paper", "strength": 0.28, "scale": 1 }
+}
+```
+
+`mode` is `matched` or `solid`; procedural texture kinds are `none`, `paper`,
+and `fibers`. Texture configuration contains no asset URL or arbitrary CSS.
+`solid` plus `none` must paint a truly flat color. Scan imagery remains a
+separate immutable source layer and is never sampled or altered to create the
+solid background.
 
 ## 6. Context model
 
@@ -238,6 +262,11 @@ Initial modes are:
 
 Automation may derive a context with explicit overrides. There is no mutable
 global context singleton.
+
+Clearing selection sets `activeRegionId` to `null`, empties
+`selectedRegionIds`, and restores `{ "kind": "page" }` as the active scope.
+It is a transient context change, not an operator, and therefore never enters
+project history.
 
 ## 7. Operators and transactions
 
@@ -319,6 +348,19 @@ Every resolved field includes provenance:
 The Properties editor shows both effective and authored values and offers
 "Reset to inherited" per field. Explicit `null` tombstones are used where a
 local overlay must clear a published assignment; absence always means inherit.
+
+`core.typography` includes the closed-vocabulary layout fields `textAlign`
+(`start`, `center`, `end`, `justify`), `textAlignLast`, `textJustify`, and
+`hyphens`. These fields follow the same field-level cascade and reader-safe
+serialization as font, size, weight, color, line height, and character
+spacing.
+
+Page-target evaluation is intentionally smaller: component defaults, project,
+book, then page, with the published value preceding the workspace overlay at
+each level. `engine.evaluatePage(bookId, page)` returns an immutable page
+snapshot and field provenance. Page components never appear in
+`evaluateRegion`, even when project/book/page component bags contain both
+target kinds.
 
 ## 9. Dependency graph
 
@@ -474,6 +516,9 @@ effective values before the current browser engine is retired.
 - safe IDs, parent existence, category cycle rejection, and reference checks;
 - deterministic category ancestry and class-priority ordering;
 - full cascade precedence with field-level provenance;
+- page-target cascade, scope rejection, tombstones, and publication isolation;
+- justification vocabulary, cascade, and reader serialization;
+- selection clearing as immutable, history-free context state;
 - active versus selected context and operator `poll` behavior;
 - one changeset for multi-region and modal edits; undo, redo, and cancel;
 - lossless unknown optional extensions and rejected required extensions;

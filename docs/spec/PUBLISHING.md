@@ -70,6 +70,12 @@ a blocking status.
 6. render a human-readable settings/text/asset diff and QA sample; and
 7. require explicit confirmation for the named destination and revision.
 
+The reader projection serializes reader-safe page-target components once on
+each page object and region-target components on individual regions. Page
+appearance accepts only validated opaque colors and fixed procedural texture
+tokens; it never carries file paths, URLs, arbitrary CSS, or altered scan
+pixels into the Pages bundle.
+
 The authoring project is never uploaded as the reader publication. Credentials,
 workspaces, local paths, history, private labels, and optional editor-only
 extensions are excluded by construction.
