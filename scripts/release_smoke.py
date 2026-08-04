@@ -26,8 +26,16 @@ POSTDEPLOY_PATHS = (
     "index.html",
     "reader.html",
     "method.html",
+    "assets/reader.js",
+    "assets/reader.css",
     "data/catalog.json",
 )
+POSTDEPLOY_CONTENT_TYPES = {
+    ".html": frozenset({"text/html"}),
+    ".js": frozenset({"application/javascript", "text/javascript"}),
+    ".css": frozenset({"text/css"}),
+    ".json": frozenset({"application/json"}),
+}
 
 
 class SmokeCheckError(RuntimeError):
@@ -360,6 +368,19 @@ def validate_deployed_pages(
                     label=f"Pages {relative_path} final URL",
                     require_https=require_https,
                 )
+                suffix = Path(relative_path).suffix.lower()
+                allowed_types = POSTDEPLOY_CONTENT_TYPES.get(suffix)
+                content_types = result.header_values("Content-Type")
+                media_type = (
+                    content_types[0].split(";", 1)[0].strip().lower()
+                    if len(content_types) == 1
+                    else ""
+                )
+                if allowed_types and media_type not in allowed_types:
+                    raise SmokeCheckError(
+                        f"Pages {relative_path} has unsafe Content-Type {content_types!r}; "
+                        f"expected one of {sorted(allowed_types)}"
+                    )
                 if result.body != expected_body:
                     raise SmokeCheckError(
                         f"Pages {relative_path} is stale: expected sha256 "

@@ -56,7 +56,9 @@ class ReleaseFixture:
             json.dumps({"books": catalog_books}), encoding="utf-8"
         )
         for path in release_smoke.POSTDEPLOY_PATHS[:-1]:
-            (self.root / path).write_bytes(f"committed {path}\n".encode())
+            target = self.root / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(f"committed {path}\n".encode())
 
     def close(self):
         self.temp.cleanup()
@@ -144,7 +146,7 @@ class ReleaseSmokeTests(unittest.TestCase):
             )
 
     def test_postdeploy_retries_stale_content_until_all_files_match(self):
-        attempts = {"index.html": 0}
+        attempts = {"assets/reader.js": 0}
         expected = {
             path: (self.fixture.root / path).read_bytes()
             for path in release_smoke.POSTDEPLOY_PATHS
@@ -153,11 +155,24 @@ class ReleaseSmokeTests(unittest.TestCase):
         def pages_fetch(url, origin):
             self.assertIsNone(origin)
             path = urlsplit(url).path.lstrip("/")
-            if path == "index.html":
+            if path == "assets/reader.js":
                 attempts[path] += 1
                 if attempts[path] == 1:
-                    return http_result(url, b"stale", cors=None, content_type="text/html")
-            content_type = "application/json" if path.endswith(".json") else "text/html"
+                    return http_result(
+                        url,
+                        b"stale",
+                        cors=None,
+                        content_type="text/javascript",
+                    )
+            content_type = (
+                "application/json"
+                if path.endswith(".json")
+                else "text/css"
+                if path.endswith(".css")
+                else "text/javascript"
+                if path.endswith(".js")
+                else "text/html"
+            )
             return http_result(url, expected[path], cors=None, content_type=content_type)
 
         sleeps = []
@@ -172,7 +187,37 @@ class ReleaseSmokeTests(unittest.TestCase):
         )
         self.assertEqual(checked, list(release_smoke.POSTDEPLOY_PATHS))
         self.assertEqual(sleeps, [0.25])
-        self.assertEqual(attempts["index.html"], 2)
+        self.assertEqual(attempts["assets/reader.js"], 2)
+        self.assertIn("assets/reader.js", release_smoke.POSTDEPLOY_PATHS)
+        self.assertIn("assets/reader.css", release_smoke.POSTDEPLOY_PATHS)
+
+    def test_postdeploy_rejects_wrong_reader_asset_content_type(self):
+        expected = {
+            path: (self.fixture.root / path).read_bytes()
+            for path in release_smoke.POSTDEPLOY_PATHS
+        }
+
+        def pages_fetch(url, origin):
+            self.assertIsNone(origin)
+            path = urlsplit(url).path.lstrip("/")
+            content_type = (
+                "application/json"
+                if path.endswith(".json")
+                else "text/css"
+                if path.endswith(".css")
+                else "text/html"
+                if path.endswith(".js")
+                else "text/html"
+            )
+            return http_result(url, expected[path], cors=None, content_type=content_type)
+
+        with self.assertRaisesRegex(release_smoke.SmokeCheckError, "Content-Type"):
+            release_smoke.validate_deployed_pages(
+                self.fixture.root,
+                site_url="https://maj-6.github.io/",
+                attempts=1,
+                fetch=pages_fetch,
+            )
 
 
 if __name__ == "__main__":

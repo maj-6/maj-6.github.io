@@ -7,8 +7,8 @@
   <meta name="description" content="A side-by-side reader for original herbal scans and their modern facsimile editions.">
   <title>Facsimile reader — World Herb Library</title>
   <link rel="stylesheet" href="assets/site.css">
-  <link rel="stylesheet" href="assets/reader.css">
-  <script src="assets/reader.js?v=2" defer></script>
+  <link rel="stylesheet" href="assets/reader.css?v=3">
+  <script src="assets/reader.js?v=3" defer></script>
 </head>
 <body class="reader-body" data-view="both">
   <a class="skip-link" href="#reader-stage">Skip to the page</a>
@@ -30,7 +30,8 @@
     </details>
   </header>
 
-  <section class="reader-controls" aria-label="Reader controls">
+  <div class="reader-shell" id="reader-shell">
+  <section class="reader-controls" id="reader-controls" aria-label="Reader controls">
     <div class="control-book">
       <label for="book-select">Volume</label>
       <select id="book-select" aria-label="Choose a volume" disabled>
@@ -68,7 +69,49 @@
       <span class="segmented-legend">View</span>
       <button type="button" data-view="scan" aria-pressed="false">Scan</button>
       <button type="button" data-view="facsimile" aria-pressed="false">Facsimile</button>
-      <button type="button" data-view="both" aria-pressed="true">Stack</button>
+      <button type="button" data-view="both" aria-pressed="true">Both</button>
+    </div>
+
+    <div class="reader-actions">
+      <details class="reading-settings" id="reading-settings">
+        <summary class="reader-action-button">Display</summary>
+        <fieldset class="reading-settings-card">
+          <legend>Reading display</legend>
+
+          <label class="setting-field" for="font-size-control">
+            <span>Text size</span>
+            <output id="font-size-value" for="font-size-control">100%</output>
+          </label>
+          <input id="font-size-control" type="range" min="75" max="200" step="5" value="100">
+
+          <label class="setting-field" for="font-family-control"><span>Typeface</span></label>
+          <select id="font-family-control">
+            <option value="edition">Edition typography</option>
+            <option value="georgia">Georgia serif</option>
+            <option value="palatino">Palatino serif</option>
+            <option value="sans">System sans serif</option>
+          </select>
+
+          <label class="setting-field" for="line-height-control">
+            <span>Line height</span>
+            <output id="line-height-value" for="line-height-control">1.00×</output>
+          </label>
+          <input id="line-height-control" type="range" min="85" max="160" step="5" value="100">
+
+          <label class="setting-field" for="zoom-control">
+            <span>Page zoom</span>
+            <output id="zoom-value" for="zoom-control">100%</output>
+          </label>
+          <input id="zoom-control" type="range" min="50" max="250" step="10" value="100">
+
+          <button class="settings-reset" id="display-reset" type="button">Reset display</button>
+        </fieldset>
+      </details>
+
+      <button class="reader-action-button fullscreen-toggle" id="fullscreen-toggle" type="button" aria-label="Full screen" aria-pressed="false" aria-controls="reader-shell">
+        <span aria-hidden="true">⛶</span>
+        <span id="fullscreen-label">Full screen</span>
+      </button>
     </div>
   </section>
 
@@ -78,6 +121,7 @@
       <span>Preparing the reading room…</span>
     </div>
 
+    <div class="spread-scroll" id="spread-scroll" role="region" tabindex="0" aria-label="Original and facsimile page spread" aria-describedby="zoom-help">
     <div class="page-spread" id="page-spread" aria-busy="true">
       <section class="page-panel scan-panel" aria-labelledby="scan-heading">
         <header class="panel-header">
@@ -113,6 +157,7 @@
         </div>
       </section>
     </div>
+    </div>
   </main>
 
   <section class="filmstrip-shell" aria-label="Page thumbnails">
@@ -124,7 +169,9 @@
   </section>
 
   <p class="visually-hidden" id="overflow-help">This region contains more text than fits at a readable size. Focus it and scroll within the region to read the complete text.</p>
+  <p class="visually-hidden" id="zoom-help">When the spread is zoomed, focus this region and use the arrow keys or pointer gestures to pan across both pages.</p>
   <div class="reader-live visually-hidden" id="reader-live" aria-live="polite" aria-atomic="true"></div>
+  </div>
   <noscript><div class="noscript">JavaScript is required to load scans and facsimile pages.</div></noscript>
 </body>
 </html>
