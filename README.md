@@ -1,36 +1,88 @@
-# iDocs
-iDocs is free one page documentation html template built with Bootstrap 4. Which helps you to create your offline and online documentation for your themes, templates, plugins and software.
+# World Herb Library reading facsimiles
 
-## Overview:
-<a href="https://harnishdesign.net/idocs-free-one-page-documentation-html-template.html">Template Overview Page</a>
+This repository publishes a static World Herb Library reading room for three
+early printed herbals selected from `whl_catalog.csv`:
 
-## Demo:
-Click this link for a live demo : <a href="https://harnishdesign.net/demo/html/idocs/demos.html">View a Demo here</a>
+- Leonhart Fuchs, *De Historia Stirpium Commentarii Insignes* (Latin, 1542);
+- *Herbarius zü Teütsch* (German, 1488; attributed to Johannes von Cuba and
+  printed by Hans Schönsperger);
+- *A Boke of the Propreties of Herbes* (archaic English, 1552; anonymous,
+  Copland/Kele imprint).
 
-## How to Use:
-You can read details documentation here - <a href="https://harnishdesign.net/demo/html/idocs/help/">View Documentation Here</a>
+The reader displays each source scan beside a modern-English facsimile built
+from page-specific OCR geometry. Translation requests are isolated to one
+physical page and return text under stable source-region IDs. Accepted text is
+written directly to those IDs, eliminating post-hoc proportional
+redistribution; this contract does not itself guarantee semantic accuracy.
+Readers can switch between modern and
+diplomatic OCR, reveal layout boxes, deep-link to any page, and inspect the
+sampled QA report.
 
-## Bugs and Issues
-Have an issue with this template? <a href="https://github.com/harnishdesign/iDocs/issues">Open a new issue here</a>
+## Repository layout
 
-OR Leave a comment on the <a href="https://harnishdesign.net/idocs-free-one-page-documentation-html-template.html">Template Overview Page at Harnish Design</a> for general inquiry.
+- `index.html`, `reader.html`, `method.html` — the GitHub Pages application;
+- `assets/` — accessible, dependency-free CSS and JavaScript;
+- `pipeline/process.py` — resumable OCR, translation, scan, thumbnail, paper
+  color, and non-generative artwork build;
+- `pipeline/qa.py` — every-page validation plus fixed sample overlays;
+- `pipeline/publish_aws.py` — dry-run-first private S3 + CloudFront OAC
+  publication;
+- `pipeline/books.json` — pinned sources, hashes, sample pages, and reviewed
+  editorial overrides;
+- `scripts/release_smoke.py` — fail-closed local, CloudFront/CORS, and deployed
+  Pages verification;
+- `pipeline/whl_selection.csv` — the three selected catalogue rows, paired
+  with the checksum and byte count of the full catalogue in `books.json`;
+- `tests/pipeline/`, `tests/release/`, `tests/web/` — pipeline, publication,
+  and static reader contract tests.
 
-## Credits:
-<ul>
-<li><a href="https://getbootstrap.com/">Bootstrap 4</a></li>
-<li><a href="http://www.jquery.com/">jQuery</a></li>
-<li><a href="http://gsgd.co.uk/sandbox/jquery/easing/">jQuery easing</a></li>
-<li><a href="http://dimsemenov.com/plugins/magnific-popup/">Magnific Popup</a></li>
-<li><a href="https://fontawesome.com/">Font Awesome</a></li>
-<li><a href="https://highlightjs.org/">Highlight Js</a></li>
-<li><a href="https://unsplash.com/">Unsplash</a></li>
-</ul>
+The generated 1,623-page asset corpus is not committed to Git. It is stored
+under an immutable S3 version prefix and served through CloudFront; the small
+catalogue on GitHub Pages points to those manifests.
 
-## Created By:
-<a href="https://www.harnishdesign.net/">Harnish Design</a>
+## Reproduce the build
 
-## Donations & Support
-My Brain needs two urgent coffees to continue working. Buy one or two coffees for me here: https://opencollective.com/idocs
+See [`pipeline/README.md`](pipeline/README.md) for phase-by-phase commands and
+the artifact contract. The build pins `mistral-ocr-4-0` and
+`mistral-large-2512`, records SHA-256 source hashes, and keys accepted,
+normalized translation caches to the exact prompt and page input. Raw OCR
+responses and rejected translation response content are retained separately;
+accepted translation files are normalized provenance wrappers, not raw
+chat-completions responses. Every JSON object, including each model-returned
+region map, is decoded with duplicate-key rejection instead of silently keeping
+the final repeated value. Scan-reviewed full-region replacements are overlaid
+before cache validation and listed in `reviewed_region_ids`, so a later
+model omission cannot erase editorially verified text.
 
-## License:
-See the <a href="https://github.com/harnishdesign/iDocs/blob/main/LICENSE">LICENSE</a> file for license rights and limitations (MIT).
+Credentials are read only from the normal environment or AWS credential
+chain. They are never accepted as command-line values or written to public
+artifacts.
+
+## Validate
+
+```powershell
+node --test tests\web\static-reader.test.mjs
+python -m unittest discover -s tests\pipeline
+python -m unittest discover -s tests\release
+python -m compileall -q pipeline scripts tests
+```
+
+Run `pipeline/qa.py --strict` after processing. Model confidence and embedded
+PDF text are diagnostic signals, not empirical accuracy or ground truth; the
+site labels all modern text as machine-assisted and keeps the scan visible.
+
+## Provenance and reuse
+
+Every book manifest links to its World Herb Library record, source PDF,
+checksum, byte count, an independent bibliographic record, and the processing
+models. The underlying printed works are centuries old, but an exact
+institutional scan can carry a separate reuse statement. Downstream publishers
+should verify the terms associated with the linked source and bibliographic
+records.
+
+The MIT [`LICENSE`](LICENSE) covers repository software and documentation only
+to the extent the named copyright holder and contributors have rights to
+license them. It does not relicense the historical works, third-party scans,
+catalog metadata, institutional marks, or generated derivatives of those
+scans. See [`NOTICE.md`](NOTICE.md) for source-material, generated-artifact, and
+service notices.

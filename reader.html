@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17231b">
+  <meta name="description" content="A side-by-side reader for original herbal scans and their modern facsimile editions.">
+  <title>Facsimile reader — World Herb Library</title>
+  <link rel="stylesheet" href="assets/site.css">
+  <link rel="stylesheet" href="assets/reader.css">
+  <script src="assets/reader.js" defer></script>
+</head>
+<body class="reader-body" data-view="both">
+  <a class="skip-link" href="#reader-stage">Skip to the page</a>
+
+  <header class="reader-header">
+    <a class="reader-home" href="index.html" aria-label="Back to the World Herb Library collection">
+      <span aria-hidden="true">←</span>
+      <span class="reader-home-label">Collection</span>
+    </a>
+    <div class="reader-identity">
+      <p class="reader-eyebrow" id="reader-meta">World Herb Library</p>
+      <h1 id="reader-title">Opening a volume…</h1>
+    </div>
+    <details class="qa-popover">
+      <summary class="qa-badge" id="qa-badge">QA status loading</summary>
+      <div class="qa-card" id="qa-help">
+        Quality information will appear when the book manifest has loaded.
+      </div>
+    </details>
+  </header>
+
+  <section class="reader-controls" aria-label="Reader controls">
+    <div class="control-book">
+      <label for="book-select">Volume</label>
+      <select id="book-select" aria-label="Choose a volume" disabled>
+        <option>Loading catalogue…</option>
+      </select>
+    </div>
+
+    <nav class="page-nav" aria-label="Page navigation">
+      <button class="icon-button" id="previous-page" type="button" aria-label="Previous page" disabled><span aria-hidden="true">←</span></button>
+      <form id="page-form" class="page-form">
+        <label for="page-input">Page</label>
+        <input id="page-input" type="number" inputmode="numeric" min="1" value="1" aria-describedby="page-total" disabled>
+        <span id="page-total">of —</span>
+      </form>
+      <button class="icon-button" id="next-page" type="button" aria-label="Next page" disabled><span aria-hidden="true">→</span></button>
+    </nav>
+
+    <div class="range-control">
+      <label class="visually-hidden" for="page-range">Move through pages</label>
+      <input id="page-range" type="range" min="1" max="1" value="1" disabled>
+    </div>
+
+    <fieldset class="segmented text-layer" aria-label="Facsimile text layer">
+      <legend>Text</legend>
+      <label><input type="radio" name="text-layer" value="modern" checked><span id="modern-layer-label">Modern</span></label>
+      <label><input type="radio" name="text-layer" value="diplomatic"><span>Diplomatic OCR</span></label>
+    </fieldset>
+
+    <label class="overlay-control" for="layout-toggle">
+      <input type="checkbox" id="layout-toggle">
+      <span>Show layout</span>
+    </label>
+
+    <div class="segmented view-switcher" aria-label="Mobile page view">
+      <span class="segmented-legend">View</span>
+      <button type="button" data-view="scan" aria-pressed="false">Scan</button>
+      <button type="button" data-view="facsimile" aria-pressed="false">Facsimile</button>
+      <button type="button" data-view="both" aria-pressed="true">Stack</button>
+    </div>
+  </section>
+
+  <main class="reader-main" id="reader-stage" tabindex="-1">
+    <div class="reader-message" id="reader-message" role="status" aria-live="polite">
+      <span class="message-spinner" aria-hidden="true"></span>
+      <span>Preparing the reading room…</span>
+    </div>
+
+    <div class="page-spread" id="page-spread" aria-busy="true">
+      <section class="page-panel scan-panel" aria-labelledby="scan-heading">
+        <header class="panel-header">
+          <div>
+            <span class="panel-kicker">Source</span>
+            <h2 id="scan-heading">Original scan</h2>
+          </div>
+          <a class="panel-source" id="source-link" href="#" target="_blank" rel="noopener" hidden>Source record <span aria-hidden="true">↗</span></a>
+        </header>
+        <div class="page-viewport scan-viewport">
+          <div class="page-loading" id="scan-loading" aria-hidden="true"></div>
+          <img class="scan-page" id="scan-page" alt="" decoding="async">
+          <div class="page-error" id="scan-error" hidden>Scan unavailable for this page.</div>
+        </div>
+      </section>
+
+      <section class="page-panel facsimile-panel" aria-labelledby="facsimile-heading">
+        <header class="panel-header">
+          <div>
+            <span class="panel-kicker">Machine-assisted reading edition</span>
+            <h2 id="facsimile-heading">Modern reading facsimile</h2>
+          </div>
+          <span class="page-confidence" id="page-confidence">Confidence —</span>
+        </header>
+        <div class="page-viewport facsimile-viewport">
+          <div class="facsimile-page is-loading" id="facsimile-page" role="document" aria-label="Facsimile page loading">
+            <div class="facsimile-text" id="facsimile-text"></div>
+          </div>
+          <div class="page-error" id="facsimile-error" hidden>
+            <strong>Facsimile text unavailable.</strong>
+            <span>The source scan can still be read on the left.</span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <section class="filmstrip-shell" aria-label="Page thumbnails">
+    <div class="filmstrip-heading">
+      <span>Nearby folios</span>
+      <span id="keyboard-hint">← → to turn pages</span>
+    </div>
+    <ol class="filmstrip" id="filmstrip"></ol>
+  </section>
+
+  <p class="visually-hidden" id="overflow-help">This region contains more text than fits at a readable size. Focus it and scroll within the region to read the complete text.</p>
+  <div class="reader-live visually-hidden" id="reader-live" aria-live="polite" aria-atomic="true"></div>
+  <noscript><div class="noscript">JavaScript is required to load scans and facsimile pages.</div></noscript>
+</body>
+</html>

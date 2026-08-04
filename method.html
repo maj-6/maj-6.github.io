@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17231b">
+  <meta name="description" content="Selection, OCR, facsimile reconstruction, quality review, and publishing method for the World Herb Library reading editions.">
+  <title>Method &amp; QA — World Herb Library</title>
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body class="method-body">
+  <a class="skip-link" href="#main-content">Skip to the method</a>
+  <header class="site-header">
+    <a class="wordmark" href="index.html" aria-label="World Herb Library home">
+      <span class="wordmark-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span>World Herb Library</span>
+    </a>
+    <nav class="site-nav" aria-label="Primary navigation">
+      <a href="index.html#collection">The books</a>
+      <a href="method.html" aria-current="page">Method &amp; QA</a>
+      <a href="reader.html">Open reader</a>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    <section class="method-hero">
+      <p class="eyebrow">An auditable reading edition</p>
+      <h1>Keep the evidence.<br><em>Lower the barrier.</em></h1>
+      <p>The scan is always the authority. OCR geometry, diplomatic text, modern English, and preserved artwork remain separate layers so a reader can compare every editorial decision with the page that produced it.</p>
+    </section>
+
+    <section class="method-page-section method-selection" aria-labelledby="selection-title">
+      <div class="method-page-heading">
+        <p class="eyebrow">01 · Selection</p>
+        <h2 id="selection-title">Three different reasons to make a book readable</h2>
+      </div>
+      <p class="selection-scope">The catalogue review covered all 5,534 rows in <code>whl_catalog.csv</code>, including 5,314 records with a publication file. Selection favored early printed works where language, blackletter type, or complex page architecture creates a genuine access barrier, while giving the pipeline three distinct visual stress cases. A <a href="pipeline/whl_selection.csv">checksum-pinned three-row snapshot</a> preserves the exact catalogue evidence.</p>
+      <div class="selection-list">
+        <article>
+          <span>Latin · 1542 · 940 pages</span>
+          <h3>Leonhart Fuchs, <i>De Historia Stirpium</i></h3>
+          <p>A landmark Renaissance synthesis whose hundreds of botanical woodcuts make it the visual anchor—and whose Latin keeps most general readers at a distance.</p>
+          <div class="selection-links">
+            <a href="reader.html?book=fuchs-1542&amp;page=236">Inspect the full-page woodcut test&nbsp;→</a>
+            <a href="https://wellcomecollection.org/works/qf49qgyt">Bibliographic record&nbsp;↗</a>
+          </div>
+        </article>
+        <article>
+          <span>German · 1488 · 526 pages</span>
+          <h3><i>Herbarius zü Teütsch</i></h3>
+          <p>A vernacular incunable attributed to Johannes von Cuba and printed by Hans Schönsperger, with irregular two-column blackletter and compact, often colored woodcuts.</p>
+          <div class="selection-links">
+            <a href="reader.html?book=herbarius-1488&amp;page=264">Inspect a mixed text-and-woodcut page&nbsp;→</a>
+            <a href="https://www.biodiversitylibrary.org/bibliography/164698">Bibliographic record&nbsp;↗</a>
+          </div>
+        </article>
+        <article>
+          <span>Archaic English · 1552 · 157 pages</span>
+          <h3><i>A Boke of the Propreties of Herbes</i></h3>
+          <p>An anonymous descendant of the Banckes herbal tradition. Its language is nominally English, but spelling and dense blackletter make normalization transformative.</p>
+          <div class="selection-links">
+            <a href="reader.html?book=banckes-1552&amp;page=40">Inspect a decorated-initial page&nbsp;→</a>
+            <a href="https://www.cambridge.org/core/books/early-modern-herbals-and-the-book-trade/anonymity-in-the-printed-english-herbal/654D69D3A39F3196A7CB8E1A614CF141">STC 13175.15A discussion&nbsp;↗</a>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="method-page-section method-build" aria-labelledby="build-title">
+      <div class="method-page-heading">
+        <p class="eyebrow">02 · Reproducible build</p>
+        <h2 id="build-title">From immutable source to page-addressable layers</h2>
+      </div>
+      <ol class="build-list">
+        <li><strong>Fix the source.</strong><span>Snapshot the selected catalogue rows and record the full catalogue checksum, stable PDF URL, byte count, page count, and PDF SHA-256 before processing.</span></li>
+        <li><strong>OCR every page.</strong><span>Call Mistral OCR 4 in resumable 50-page ranges, retaining each raw response, paragraph box, reading order, source type, and page-level confidence score.</span></li>
+        <li><strong>Normalize geometry.</strong><span>Convert page coordinates to a 0–1 grid and assign conservative, geometry-informed roles. Model labels remain styling hints.</span></li>
+        <li><strong>Keep two texts.</strong><span>Store untouched diplomatic OCR beside modern English keyed to the same stable region IDs. Give the translator one physical page of context, then reject missing, shifted, stale, or structurally inconsistent results rather than redistributing prose after the fact.</span></li>
+        <li><strong>Preserve original marks.</strong><span>Erase boxed source text from a scan-derived layer and make only paper-like pixels transparent. Woodcuts and ornaments are never regenerated.</span></li>
+        <li><strong>Match each leaf.</strong><span>Preserve each page’s sampled paper tone and use its sampled ink when readable; if scan noise makes the two colors too similar, shift only the facsimile text toward black or white until it reaches 4.5:1 contrast. Locally available book serifs are fitted within the recovered grid. This interprets hierarchy and density rather than claiming an exact type reconstruction.</span></li>
+        <li><strong>Publish for motion.</strong><span>Encode page scans and thumbnails as WebP, fetch only the current page, prefetch adjacent pages, and virtualize the filmstrip.</span></li>
+      </ol>
+      <p class="method-source-note">The build pins <code>mistral-ocr-4-0</code> and <code>mistral-large-2512</code>; credentials are environment-only. Raw OCR, rejected translation responses, normalized accepted caches, and prompt/input hashes remain distinct so reruns are auditable. Duplicate JSON keys are rejected in both stored records and model-returned region maps.</p>
+    </section>
+
+    <section class="method-page-section method-qa" aria-labelledby="qa-title">
+      <div class="method-page-heading">
+        <p class="eyebrow">03 · Quality assessment</p>
+        <h2 id="qa-title">Review what the system can—and cannot—prove</h2>
+      </div>
+      <div class="qa-grid">
+        <article>
+          <h3>Every page, automatically</h3>
+          <p>The build checks source bytes/hash/page count, page completeness, dimensions, unique region IDs, reading order, in-bounds geometry, text-layer coverage, asset headers, sampled colors, and likely illustration misses. A release fingerprint binds the reviewed config, annotations, normalized pages, scans, thumbnails, and art bytes.</p>
+        </article>
+        <article>
+          <h3>Fifteen fixed visual samples</h3>
+          <p>Five pages per book cover front matter, ordinary text, mixed layouts, full plates, colored woodcuts, decorated initials, indices, and late-book pages. The page set is fixed in configuration.</p>
+        </article>
+        <article>
+          <h3>Observed strengths</h3>
+          <p>Paragraph geometry and reading order were consistently useful. Roman Latin was the cleanest sample; the German Fraktur and English blackletter showed more historical-letter confusions.</p>
+        </article>
+        <article>
+          <h3>Observed failures</h3>
+          <p>A preliminary page-image probe missed Fuchs’s full-page plant on page 236, although the final document-range run boxed it correctly—evidence that illustration labels can vary by extraction mode. OCR also hallucinated content on blank or bleed-through leaves. Those reviewed page and region outputs are explicitly suppressed while every raw response remains retained. Early multi-page and proportional-reflow translation trials borrowed or shifted text. The production contract instead sends exactly one physical page at a time and maps every result directly back to its stable source-region ID; rejected trials remain outside the active cache.</p>
+        </article>
+      </div>
+      <aside class="method-caution">
+        <strong>No false precision</strong>
+        <p>Model confidence is diagnostic, not accuracy. The PDFs’ hidden text layers are compared only as a disagreement baseline—not as ground truth. Without manually transcribed and boxed ground truth, this edition does not claim character error rate, word error rate, or layout IoU. Machine-assisted text remains unverified; cite the scan for scholarship. The remedies are presented as historical sources, not medical advice.</p>
+      </aside>
+    </section>
+
+    <section class="method-page-section method-delivery" aria-labelledby="delivery-title">
+      <div class="method-page-heading">
+        <p class="eyebrow">04 · Delivery &amp; provenance</p>
+        <h2 id="delivery-title">A small application, a private origin, and a clear chain back</h2>
+      </div>
+      <div class="delivery-flow" aria-label="Publishing architecture">
+        <span>GitHub Pages<br><small>reader + catalogue</small></span>
+        <b aria-hidden="true">↔</b>
+        <span>CloudFront<br><small>HTTPS + edge cache</small></span>
+        <b aria-hidden="true">↔</b>
+        <span>Private S3<br><small>versioned assets</small></span>
+      </div>
+      <p>All public book assets use an immutable version prefix. The S3 bucket blocks public access and grants read permission only to its CloudFront distribution; browser CORS is restricted to this site. Each manifest links back to the World Herb Library record, source PDF, source checksum and byte count, an independent bibliographic record, and exact processing models. The historical works are centuries old, but reuse statements for a particular institutional scan may be separate; provenance links are retained so downstream publishers can verify the applicable source terms.</p>
+      <div class="method-links">
+        <a href="https://docs.mistral.ai/studio-api/document-processing/basic_ocr">Mistral OCR block documentation&nbsp;↗</a>
+        <a href="https://docs.mistral.ai/models/model-cards/ocr-4-0">OCR 4 model card&nbsp;↗</a>
+        <a href="https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html">CloudFront private S3 origins&nbsp;↗</a>
+        <a href="index.html#collection">Return to the three books&nbsp;→</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <a class="wordmark wordmark-footer" href="index.html">
+      <span class="wordmark-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span>World Herb Library</span>
+    </a>
+    <p>An independent experimental reading edition built from historical scans.</p>
+    <p class="footer-fineprint">Facsimile text may contain OCR or translation errors. Consult the scan for scholarly citation; historical remedies are not medical advice.</p>
+  </footer>
+</body>
+</html>
