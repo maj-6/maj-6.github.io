@@ -14,9 +14,12 @@ const readerHtml = read("reader.html");
 const siteJs = read("assets/site.js");
 const readerJs = read("assets/reader.js");
 const readerCss = read("assets/reader.css");
+const regionSettingsJs = read("assets/region-settings.js");
+const readerConfig = JSON.parse(read("data/reader-config.json"));
+const publishedRegionSettings = JSON.parse(read("data/region-settings.json"));
 
 test("browser scripts pass JavaScript syntax validation", () => {
-  for (const file of ["assets/site.js", "assets/reader.js"]) {
+  for (const file of ["assets/site.js", "assets/region-settings.js", "assets/reader.js"]) {
     execFileSync(process.execPath, ["--check", resolve(root, file)], { stdio: "pipe" });
   }
 });
@@ -63,6 +66,33 @@ test("reader exposes all required navigation and comparison controls", () => {
     "zoom-value",
     "display-reset",
     "fullscreen-toggle",
+    "editor-toggle",
+    "region-editor-panel",
+    "editor-region-overlay",
+    "editor-scope",
+    "editor-font-family",
+    "editor-font-size",
+    "editor-font-weight",
+    "editor-font-color",
+    "editor-line-height",
+    "editor-letter-spacing",
+    "editor-fit-mode",
+    "editor-wrap",
+    "editor-overflow",
+    "editor-max-width",
+    "editor-min-font",
+    "editor-geometry-x",
+    "editor-geometry-y",
+    "editor-geometry-width",
+    "editor-geometry-height",
+    "editor-text-toggle",
+    "editor-restore-text",
+    "editor-reset-geometry",
+    "editor-reset-scope",
+    "editor-undo",
+    "editor-redo",
+    "editor-export",
+    "editor-import",
     "spread-scroll",
     "source-link",
     "page-confidence",
@@ -116,8 +146,10 @@ test("reader persists typography while preserving explicit user sizing", () => {
   assert.match(readerJs, /new ResizeObserver\(\(\) => scheduleTextFit\(\)\)/);
   assert.doesNotMatch(readerJs, /new ResizeObserver\(scheduleTextFit\)/);
   assert.match(readerJs, /region\.style\.fontSize = `\$\{Math\.floor\(requestedSize \* 10\) \/ 10\}px`/);
-  assert.match(readerJs, /roleLineHeight\(region\.dataset\.role\) \* state\.lineHeightScale/);
-  assert.match(readerJs, /region\.style\.lineHeight = String\(roleLineHeight/);
+  assert.match(readerJs, /lineHeight \* state\.lineHeightScale/);
+  assert.match(readerJs, /region\.style\.lineHeight = String\(lineHeight \* state\.lineHeightScale\)/);
+  assert.match(readerJs, /authoredScale/);
+  assert.match(readerJs, /effectiveRegionFont/);
   assert.doesNotMatch(readerJs, /referenceSizeRatio|fitReferenceTextRegion/);
   assert.match(readerJs, /elements\.fontSize\.addEventListener\("input", \(\) => setTextScale/);
   assert.match(readerJs, /elements\.fontFamily\.addEventListener\("change", \(\) => setFontChoice/);
@@ -143,7 +175,8 @@ test("text preferences apply to subpixel regions and scale exactly once with pag
     "state",
     `${clampSource}\n${roleSizesSource}\n${lineHeightSource}\n${baseSizeSource}\n${displaySizeSource}\n${applySource}; return { displayTextSize, applyTextRegionPreferences };`
   )(state);
-  const region = { textContent: "tiny OCR box", dataset: { role: "body" }, style: {}, clientWidth: 0, clientHeight: 0 };
+  const style = { removeProperty() {} };
+  const region = { textContent: "tiny OCR box", dataset: { role: "body" }, style, clientWidth: 0, clientHeight: 0 };
 
   helpers.applyTextRegionPreferences(region, 512, 1);
   assert.equal(region.style.fontSize, "43.2px");
@@ -229,8 +262,154 @@ test("fullscreen keeps controls available and has a CSS fallback", () => {
   assert.match(readerJs, /updateSpreadAccessibility/);
   assert.match(readerJs, /Original scan page/);
   assert.match(readerJs, /Facsimile page/);
-  assert.match(readerHtml, /assets\/reader\.css\?v=4/);
-  assert.match(readerHtml, /assets\/reader\.js\?v=4/);
+  assert.match(readerHtml, /assets\/reader\.css\?v=5/);
+  assert.match(readerHtml, /assets\/region-settings\.js\?v=1/);
+  assert.match(readerHtml, /assets\/reader\.js\?v=5/);
+});
+
+test("reader loads the versioned settings engine before the reader runtime", () => {
+  const settingsAsset = "assets/region-settings.js?v=1";
+  const readerAsset = "assets/reader.js?v=5";
+  assert.ok(readerHtml.indexOf(settingsAsset) >= 0, "settings engine asset is missing");
+  assert.ok(readerHtml.indexOf(readerAsset) >= 0, "reader runtime asset is missing");
+  assert.ok(
+    readerHtml.indexOf(settingsAsset) < readerHtml.indexOf(readerAsset),
+    "settings engine must load before the reader runtime"
+  );
+  assert.match(regionSettingsJs, /whl-region-settings\/1/);
+});
+
+test("committed editor configuration and published settings use versioned contracts", () => {
+  assert.equal(readerConfig.schema, "whl-reader-config/1");
+  assert.equal(readerConfig.projectId, "living-herbal");
+  assert.equal(typeof readerConfig.features?.regionEditor, "boolean");
+  assert.equal(readerConfig.publishedSettings, "data/region-settings.json");
+  assert.equal(readerConfig.draftStorageKey, "whl-region-settings-v1");
+
+  assert.equal(publishedRegionSettings.schema, "whl-region-settings/1");
+  assert.equal(publishedRegionSettings.schemaVersion, 1);
+  assert.equal(publishedRegionSettings.projectId, "living-herbal");
+  assert.equal(typeof publishedRegionSettings.overrides, "object");
+  assert.ok(!Array.isArray(publishedRegionSettings.overrides));
+});
+
+test("editor surfaces are inert until the JSON feature gate enables them", () => {
+  for (const id of ["editor-toggle", "region-editor-panel", "editor-region-overlay"]) {
+    const tag = readerHtml.match(new RegExp(`<[^>]+id="${id}"[^>]*>`))?.[0];
+    assert.ok(tag, `${id} is missing`);
+    assert.match(tag, /\shidden(?:\s|>|$)/, `${id} must start hidden`);
+  }
+  assert.doesNotMatch(readerHtml, /\scontenteditable(?:=|\s|>)/i);
+  assert.match(readerJs, /isRegionEditorEnabled/);
+});
+
+test("region editor feature gate enables only an exact, literal true contract", () => {
+  const source = readerJs.match(
+    /function isRegionEditorEnabled[\s\S]*?(?=\n\n  function )/
+  )?.[0];
+  assert.ok(source, "isRegionEditorEnabled function could not be located");
+  const isRegionEditorEnabled = Function(
+    `${source}; return isRegionEditorEnabled;`
+  )();
+  const enabled = {
+    schema: "whl-reader-config/1",
+    projectId: "living-herbal",
+    features: { regionEditor: true }
+  };
+  assert.equal(isRegionEditorEnabled(enabled), true);
+
+  const disabled = [
+    undefined,
+    null,
+    {},
+    { schema: "whl-reader-config/1" },
+    { ...enabled, features: {} },
+    { ...enabled, features: { regionEditor: false } },
+    { ...enabled, features: { regionEditor: null } },
+    { ...enabled, features: { regionEditor: "true" } },
+    { ...enabled, features: { regionEditor: 1 } },
+    { ...enabled, schema: "untrusted-reader-config/1" },
+    { ...enabled, projectId: "another-project" }
+  ];
+  for (const config of disabled) assert.equal(isRegionEditorEnabled(config), false);
+  assert.match(source, /features\?\.regionEditor === true/);
+  assert.match(source, /projectId === ["']living-herbal["']/);
+});
+
+test("reader applies published settings in both modes and gates drafts and mutation", () => {
+  const source = readerJs.match(
+    /async function initializeRegionSettings[\s\S]*?(?=\n\n  function )/
+  )?.[0];
+  assert.ok(source, "initializeRegionSettings function could not be located");
+  const publishedFetch = source.indexOf("fetchJson(publishedUrl");
+  const persistenceGate = source.indexOf("if (state.editorEnabled)");
+  assert.ok(publishedFetch >= 0, "published region settings are not loaded");
+  assert.ok(
+    persistenceGate > publishedFetch,
+    "published settings must load before the editor-only persistence gate"
+  );
+  assert.match(source, /if \(state\.editorEnabled\)[\s\S]*?createBrowserPersistence/);
+  assert.match(source, /createEngine\(\{[\s\S]*?base: published[\s\S]*?editorEnabled: state\.editorEnabled/);
+  assert.match(source, /if \(state\.editorEnabled\) mountRegionEditor\(\)/);
+  assert.match(source, /reader remains available/);
+  assert.match(readerJs, /await initializeRegionSettings\(\)/);
+
+  const apiSource = readerJs.match(
+    /function exposeRegionSettingsApi[\s\S]*?(?=\n\n  (?:async )?function )/
+  )?.[0];
+  assert.ok(apiSource, "exposeRegionSettingsApi function could not be located");
+  assert.match(apiSource, /if \(!state\.editorEnabled\)/);
+  assert.match(apiSource, /window\.WHLReaderEditor =/);
+  assert.ok(
+    apiSource.indexOf("if (!state.editorEnabled)")
+      < apiSource.indexOf("window.WHLReaderEditor ="),
+    "mutation API must be assigned only after the disabled-mode return"
+  );
+});
+
+test("arrow navigation reserves keys only for controls that consume them", () => {
+  const source = readerJs.match(
+    /function reservesArrowKeys[\s\S]*?(?=\n\n  function )/
+  )?.[0];
+  assert.ok(source, "reservesArrowKeys function could not be located");
+  const spreadScroll = { tagName: "DIV" };
+  const reservesArrowKeys = Function(
+    "elements",
+    `${source}; return reservesArrowKeys;`
+  )({ spreadScroll });
+  const target = (tagName, closestMatches = [], contentEditable = false) => ({
+    tagName,
+    isContentEditable: contentEditable,
+    closest: (selector) => closestMatches.some((match) => selector.includes(match))
+      ? { matched: true }
+      : null
+  });
+
+  for (const navigationTarget of [
+    target("SUMMARY"),
+    target("BUTTON"),
+    target("A")
+  ]) assert.equal(reservesArrowKeys(navigationTarget), false);
+
+  for (const reservedTarget of [
+    target("INPUT"),
+    target("SELECT"),
+    target("TEXTAREA"),
+    target("DIV", [], true),
+    spreadScroll,
+    target("DIV", ["#spread-scroll"]),
+    target("DIV", [".text-region.is-overflowing"]),
+    target("DIV", [".text-region.is-editor-selected"]),
+    target("DIV", ["#region-editor-panel"]),
+    target("BUTTON", [".editor-region-handle"])
+  ]) assert.equal(reservesArrowKeys(reservedTarget), true);
+
+  assert.match(readerJs, /if \(reservesArrowKeys\(target\)\) return;/);
+  const keydownHandler = readerJs.match(
+    /window\.addEventListener\("keydown"[\s\S]*?\n    \}\);/
+  )?.[0];
+  assert.ok(keydownHandler, "global keydown handler could not be located");
+  assert.doesNotMatch(keydownHandler, /a, summary|\[role=['"]button/);
 });
 
 test("reader consumes the manifest contract without injecting source HTML", () => {
@@ -284,7 +463,7 @@ test("reader preserves responsive access, focus, and readable overflow", () => {
   assert.match(readerJs, /readyInkColor|readableInkColor/);
   assert.match(readerJs, /passed with warnings/);
   assert.doesNotMatch(readerJs, /PageUp:\s*\(\)\s*=>/);
-  assert.doesNotMatch(readerJs, /scrollIntoView\(/);
+  assert.match(readerJs, /max-width: 850px[\s\S]*?scrollIntoView\(/, "mobile editor selection should be revealed above its sheet");
   assert.match(readerCss, /\.text-region\.is-overflowing\s*\{[\s\S]*?overflow: auto/);
   assert.doesNotMatch(readerCss, /@media \(max-width: 1120px\)[\s\S]*?\.overlay-control\s*\{\s*display: none/);
 });

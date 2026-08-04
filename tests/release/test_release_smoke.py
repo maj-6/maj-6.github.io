@@ -55,8 +55,33 @@ class ReleaseFixture:
         (self.root / "data" / "catalog.json").write_text(
             json.dumps({"books": catalog_books}), encoding="utf-8"
         )
-        for path in release_smoke.POSTDEPLOY_PATHS[:-1]:
+        (self.root / "data" / "reader-config.json").write_text(
+            json.dumps(
+                {
+                    "schema": "whl-reader-config/1",
+                    "projectId": "living-herbal",
+                    "features": {"regionEditor": False},
+                    "publishedSettings": "data/region-settings.json",
+                    "draftStorageKey": "whl-region-settings-v1",
+                }
+            ),
+            encoding="utf-8",
+        )
+        (self.root / "data" / "region-settings.json").write_text(
+            json.dumps(
+                {
+                    "schema": "whl-region-settings/1",
+                    "schemaVersion": 1,
+                    "projectId": "living-herbal",
+                    "overrides": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+        for path in release_smoke.POSTDEPLOY_PATHS:
             target = self.root / path
+            if target.exists():
+                continue
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(f"committed {path}\n".encode())
 
@@ -105,6 +130,59 @@ class ReleaseSmokeTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(release_smoke.SmokeCheckError, "do not match"):
             release_smoke.validate_local_release(self.fixture.root)
+
+    def test_local_gate_requires_literal_boolean_editor_flag(self):
+        path = self.fixture.root / "data" / "reader-config.json"
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                path.write_text(
+                    json.dumps(
+                        {
+                            "schema": "whl-reader-config/1",
+                            "projectId": "living-herbal",
+                            "features": {"regionEditor": enabled},
+                            "publishedSettings": "data/region-settings.json",
+                            "draftStorageKey": "whl-region-settings-v1",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                config, _ = release_smoke.validate_reader_configuration(
+                    self.fixture.root
+                )
+                self.assertIs(config["features"]["regionEditor"], enabled)
+
+        for invalid in (None, "true", 1, 0, [], {}):
+            with self.subTest(invalid=invalid):
+                path.write_text(
+                    json.dumps(
+                        {
+                            "schema": "whl-reader-config/1",
+                            "projectId": "living-herbal",
+                            "features": {"regionEditor": invalid},
+                            "publishedSettings": "data/region-settings.json",
+                            "draftStorageKey": "whl-region-settings-v1",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(
+                    release_smoke.SmokeCheckError, "must be a JSON boolean"
+                ):
+                    release_smoke.validate_reader_configuration(self.fixture.root)
+
+    def test_local_gate_validates_published_region_settings_contract(self):
+        path = self.fixture.root / "data" / "region-settings.json"
+        _, settings = release_smoke.validate_reader_configuration(self.fixture.root)
+        self.assertEqual(settings["schema"], "whl-region-settings/1")
+        self.assertEqual(settings["schemaVersion"], 1)
+        self.assertEqual(settings["projectId"], "living-herbal")
+        self.assertEqual(settings["overrides"], {})
+
+        settings["overrides"] = []
+        path.write_text(json.dumps(settings), encoding="utf-8")
+        with self.assertRaisesRegex(release_smoke.SmokeCheckError, "overrides"):
+            release_smoke.validate_reader_configuration(self.fixture.root)
 
     def test_predeploy_reads_each_manifest_page_and_scan_with_exact_origin(self):
         calls = []
@@ -188,8 +266,11 @@ class ReleaseSmokeTests(unittest.TestCase):
         self.assertEqual(checked, list(release_smoke.POSTDEPLOY_PATHS))
         self.assertEqual(sleeps, [0.25])
         self.assertEqual(attempts["assets/reader.js"], 2)
+        self.assertIn("assets/region-settings.js", release_smoke.POSTDEPLOY_PATHS)
         self.assertIn("assets/reader.js", release_smoke.POSTDEPLOY_PATHS)
         self.assertIn("assets/reader.css", release_smoke.POSTDEPLOY_PATHS)
+        self.assertIn("data/reader-config.json", release_smoke.POSTDEPLOY_PATHS)
+        self.assertIn("data/region-settings.json", release_smoke.POSTDEPLOY_PATHS)
 
     def test_postdeploy_rejects_wrong_reader_asset_content_type(self):
         expected = {

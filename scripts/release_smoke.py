@@ -26,9 +26,12 @@ POSTDEPLOY_PATHS = (
     "index.html",
     "reader.html",
     "method.html",
+    "assets/region-settings.js",
     "assets/reader.js",
     "assets/reader.css",
     "data/catalog.json",
+    "data/reader-config.json",
+    "data/region-settings.json",
 )
 POSTDEPLOY_CONTENT_TYPES = {
     ".html": frozenset({"text/html"}),
@@ -86,10 +89,61 @@ def _book_ids(document: dict, label: str) -> list[str]:
     return ids
 
 
+def validate_reader_configuration(root: Path) -> tuple[dict, dict]:
+    """Validate the committed reader feature gate and published region settings."""
+    config_path = root / "data" / "reader-config.json"
+    config = load_json_object(config_path)
+    if config.get("schema") != "whl-reader-config/1":
+        raise SmokeCheckError(
+            "data/reader-config.json must use schema 'whl-reader-config/1'"
+        )
+    if config.get("projectId") != "living-herbal":
+        raise SmokeCheckError(
+            "data/reader-config.json must target projectId 'living-herbal'"
+        )
+    if config.get("publishedSettings") != "data/region-settings.json":
+        raise SmokeCheckError(
+            "data/reader-config.json publishedSettings must target "
+            "'data/region-settings.json'"
+        )
+    if config.get("draftStorageKey") != "whl-region-settings-v1":
+        raise SmokeCheckError(
+            "data/reader-config.json must use draftStorageKey "
+            "'whl-region-settings-v1'"
+        )
+    features = config.get("features")
+    if not isinstance(features, dict):
+        raise SmokeCheckError("data/reader-config.json must contain a features object")
+    if type(features.get("regionEditor")) is not bool:
+        raise SmokeCheckError(
+            "data/reader-config.json features.regionEditor must be a JSON boolean"
+        )
+
+    settings_path = root / "data" / "region-settings.json"
+    settings = load_json_object(settings_path)
+    if settings.get("schema") != "whl-region-settings/1":
+        raise SmokeCheckError(
+            "data/region-settings.json must use schema 'whl-region-settings/1'"
+        )
+    schema_version = settings.get("schemaVersion")
+    if type(schema_version) is not int or schema_version != 1:
+        raise SmokeCheckError(
+            "data/region-settings.json must use numeric schemaVersion 1"
+        )
+    if settings.get("projectId") != "living-herbal":
+        raise SmokeCheckError(
+            "data/region-settings.json must target projectId 'living-herbal'"
+        )
+    if not isinstance(settings.get("overrides"), dict):
+        raise SmokeCheckError("data/region-settings.json overrides must be an object")
+    return config, settings
+
+
 def validate_local_release(root: Path) -> tuple[dict, dict]:
     """Validate committed release metadata without making network requests."""
     config = load_json_object(root / "pipeline" / "books.json")
     catalog = load_json_object(root / "data" / "catalog.json")
+    validate_reader_configuration(root)
     configured_ids = _book_ids(config, "pipeline/books.json")
     catalog_ids = _book_ids(catalog, "data/catalog.json")
 

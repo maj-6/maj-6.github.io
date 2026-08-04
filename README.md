@@ -22,6 +22,13 @@ sampled QA report.
 
 - `index.html`, `reader.html`, `method.html` — the GitHub Pages application;
 - `assets/` — accessible, dependency-free CSS and JavaScript;
+- `data/reader-config.json` — fail-closed reader/editor feature configuration;
+- `data/region-settings.json` — sparse, validated presentation and text
+  overrides applied without changing source OCR page data;
+- `schemas/region-settings.schema.json` — machine-readable published-settings
+  structure (the runtime validator additionally enforces value bounds);
+- `docs/REGION_EDITOR.md` — region-settings precedence, editing safety,
+  persistence, import/export, and publication contract;
 - `pipeline/process.py` — resumable OCR, translation, scan, thumbnail, paper
   color, and non-generative artwork build;
 - `pipeline/qa.py` — every-page validation plus fixed sample overlays;
@@ -61,7 +68,7 @@ artifacts.
 ## Validate
 
 ```powershell
-node --test tests\web\static-reader.test.mjs
+node --test tests\web\static-reader.test.mjs tests\web\region-settings.test.mjs
 python -m unittest discover -s tests\pipeline
 python -m unittest discover -s tests\release
 python -m compileall -q pipeline scripts tests
@@ -70,6 +77,23 @@ python -m compileall -q pipeline scripts tests
 Run `pipeline/qa.py --strict` after processing. Model confidence and embedded
 PDF text are diagnostic signals, not empirical accuracy or ground truth; the
 site labels all modern text as machine-assisted and keeps the scan visible.
+
+## Reader and region editor
+
+The production project configuration defaults to reader-only mode. Region
+editing is initialized only when `features.regionEditor` in
+`data/reader-config.json` is the literal JSON boolean `true`; a missing,
+malformed, or differently typed value fails closed. This public static flag is
+a feature gate, not authentication. The browser stores only local drafts and
+exports validated JSON. It contains no AWS credentials and cannot publish
+directly to S3, CloudFront, GitHub, or this repository.
+
+Approved settings in `data/region-settings.json` remain visible to ordinary
+readers and overlay, rather than mutate, immutable OCR page JSON. Values resolve
+from book to region type to page to page-specific region type to individual
+region. See [`docs/REGION_EDITOR.md`](docs/REGION_EDITOR.md) for the schema,
+validation rules, draft persistence, import/export, programmatic API, and
+review workflow.
 
 ## Provenance and reuse
 
