@@ -3,6 +3,7 @@ import {
   DECORATED_INITIAL_CATEGORY,
   DECORATED_INITIAL_COMPONENT,
   DECORATED_INITIAL_EXTENSION,
+  PAGE_APPEARANCE_COMPONENT,
   PROJECT_SCHEMA,
   PROJECT_SCHEMA_VERSION
 } from "@whl/facsimile-engine";
@@ -116,7 +117,8 @@ export function createDemoProject() {
       labelIds: ["chapter-heading"]
     }, {
       fontFamily: "edition", fontSize: 1.04, fontWeight: 650,
-      color: "#3f2d21", lineHeight: 1.05, letterSpacing: 0.04
+      color: "#3f2d21", lineHeight: 1.05, letterSpacing: 0.04,
+      textAlign: "center", textAlignLast: "auto", textJustify: "auto", hyphens: "manual"
     }),
     "p0236-r002": authoredRegion(bookId, 236, page236Sources["p0236-r002"], {
       displayName: "Decorated P opening",
@@ -147,7 +149,8 @@ export function createDemoProject() {
       labelIds: ["plant-description"]
     }, {
       fontFamily: "edition", fontSize: 1, fontWeight: 430,
-      color: "#45362b", lineHeight: 1.2, letterSpacing: 0.01
+      color: "#45362b", lineHeight: 1.2, letterSpacing: 0.01,
+      textAlign: "justify", textAlignLast: "start", textJustify: "inter-word", hyphens: "auto"
     }),
     "p0236-r004": authoredRegion(bookId, 236, page236Sources["p0236-r004"], {
       displayName: "Female peony caption",
@@ -156,7 +159,8 @@ export function createDemoProject() {
       labelIds: ["botanical-caption"]
     }, {
       fontFamily: "edition", fontSize: 0.9, fontWeight: 550,
-      color: "#4a372b", lineHeight: 1.05, letterSpacing: 0.08
+      color: "#4a372b", lineHeight: 1.05, letterSpacing: 0.08,
+      textAlign: "center", textAlignLast: "auto", textJustify: "auto", hyphens: "manual"
     })
   };
 
@@ -168,7 +172,8 @@ export function createDemoProject() {
       labelIds: ["running-header"]
     }, {
       fontFamily: "edition", fontSize: 1, fontWeight: 650,
-      color: "#443328", lineHeight: 1.05, letterSpacing: 0.05
+      color: "#443328", lineHeight: 1.05, letterSpacing: 0.05,
+      textAlign: "center", textAlignLast: "auto", textJustify: "auto", hyphens: "manual"
     }),
     "p0237-r002": authoredRegion(bookId, 237, page237Sources["p0237-r002"], {
       displayName: "Medicinal uses",
@@ -177,7 +182,8 @@ export function createDemoProject() {
       labelIds: ["continued-description"]
     }, {
       fontFamily: "edition", fontSize: 1, fontWeight: 430,
-      color: "#49382c", lineHeight: 1.2, letterSpacing: 0.01
+      color: "#49382c", lineHeight: 1.2, letterSpacing: 0.01,
+      textAlign: "justify", textAlignLast: "start", textJustify: "inter-word", hyphens: "auto"
     }),
     "p0237-r003": authoredRegion(bookId, 237, page237Sources["p0237-r003"], {
       displayName: "Printer's ornament",
@@ -257,7 +263,13 @@ export function createDemoProject() {
       [bookId]: {
         id: bookId,
         displayName: "De Historia Stirpium",
-        components: {},
+        components: {
+          [PAGE_APPEARANCE_COMPONENT]: {
+            mode: "matched",
+            color: "#d7bea7",
+            texture: { kind: "paper", strength: 0.32, scale: 1 }
+          }
+        },
         rules: {
           ...emptyRules(),
           categories: {
@@ -268,7 +280,13 @@ export function createDemoProject() {
         },
         pages: {
           "236": { page: 236, displayName: "Leaf 201 recto", components: {}, rules: emptyRules(), regions: page236Regions },
-          "237": { page: 237, displayName: "Leaf 201 verso", components: {}, rules: emptyRules(), regions: page237Regions }
+          "237": {
+            page: 237,
+            displayName: "Leaf 201 verso",
+            components: { [PAGE_APPEARANCE_COMPONENT]: { color: "#d9c3ad" } },
+            rules: emptyRules(),
+            regions: page237Regions
+          }
         }
       }
     },

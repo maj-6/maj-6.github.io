@@ -79,6 +79,26 @@
       "type": "string",
       "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$"
     },
+    "pageAppearanceTexture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "strength", "scale"],
+      "properties": {
+        "kind": { "enum": ["none", "paper", "fibers"] },
+        "strength": { "type": "number", "minimum": 0, "maximum": 1 },
+        "scale": { "type": "number", "minimum": 0.5, "maximum": 3 }
+      }
+    },
+    "pageAppearance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "color", "texture"],
+      "properties": {
+        "mode": { "enum": ["matched", "solid"] },
+        "color": { "$ref": "#/$defs/color" },
+        "texture": { "$ref": "#/$defs/pageAppearanceTexture" }
+      }
+    },
     "sourceFingerprintMap": {
       "type": "object",
       "propertyNames": { "$ref": "#/$defs/safeId" },
@@ -135,6 +155,26 @@
       "propertyNames": { "$ref": "#/$defs/safeId" },
       "additionalProperties": { "$ref": "#/$defs/jsonObject" }
     },
+    "pageComponentBag": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "properties": {
+        "core.pageAppearance": { "$ref": "#/$defs/pageAppearance" },
+        "core.typography": { "not": {} },
+        "core.transform": { "not": {} },
+        "core.textLayout": { "not": {} },
+        "core.content": { "not": {} },
+        "core.visibility": { "not": {} },
+        "render.decoratedInitial": { "not": {} }
+      },
+      "additionalProperties": { "$ref": "#/$defs/jsonObject" }
+    },
+    "regionComponentBag": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "properties": { "core.pageAppearance": { "not": {} } },
+      "additionalProperties": { "$ref": "#/$defs/jsonObject" }
+    },
     "rendererResult": {
       "type": "object",
       "required": ["rendererId"],
@@ -168,7 +208,7 @@
         "sourceRef": { "$ref": "#/$defs/sourceRef" },
         "sourceRole": { "$ref": "#/$defs/role" },
         "annotations": { "$ref": "#/$defs/publicAnnotations" },
-        "components": { "$ref": "#/$defs/componentBag" },
+        "components": { "$ref": "#/$defs/regionComponentBag" },
         "renderer": {
           "anyOf": [
             { "type": "null" },
@@ -188,6 +228,7 @@
       "properties": {
         "page": { "type": "integer", "minimum": 1, "maximum": 10000000 },
         "displayName": { "$ref": "#/$defs/displayName" },
+        "components": { "$ref": "#/$defs/pageComponentBag" },
         "regions": {
           "type": "array",
           "items": { "$ref": "#/$defs/region" }

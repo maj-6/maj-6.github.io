@@ -5,6 +5,10 @@
   const PROJECT_CONFIG_PATH = "data/reader-config.json";
   const REGION_SETTINGS_SCHEMA = "whl-region-settings/1";
   const FONT_CHOICES = ["edition", "georgia", "palatino", "sans"];
+  const DISPLAY_ALIGNMENT_CHOICES = ["edition", "start", "justify"];
+  const BACKGROUND_MODE_CHOICES = ["matched", "solid"];
+  const TEXTURE_PRESET_CHOICES = ["none", "paper", "fibers"];
+  const SAFE_HEX_COLOR = /^#[0-9a-f]{6}$/i;
   const FONT_STACKS = Object.freeze({
     edition: "var(--facsimile-body-font, var(--serif))",
     georgia: "Georgia, 'Times New Roman', serif",
@@ -62,8 +66,14 @@
     fontFamily: document.querySelector("#font-family-control"),
     lineHeight: document.querySelector("#line-height-control"),
     lineHeightValue: document.querySelector("#line-height-value"),
+    alignment: document.querySelector("#alignment-control"),
     zoom: document.querySelector("#zoom-control"),
     zoomValue: document.querySelector("#zoom-value"),
+    backgroundMode: document.querySelector("#background-mode-control"),
+    backgroundColor: document.querySelector("#background-color-control"),
+    texturePreset: document.querySelector("#texture-preset-control"),
+    textureStrength: document.querySelector("#texture-strength-control"),
+    textureStrengthValue: document.querySelector("#texture-strength-value"),
     zoomHelp: document.querySelector("#zoom-help"),
     displayReset: document.querySelector("#display-reset"),
     fullscreenToggle: document.querySelector("#fullscreen-toggle"),
@@ -79,6 +89,10 @@
     editorFontColor: document.querySelector("#editor-font-color"),
     editorLineHeight: document.querySelector("#editor-line-height"),
     editorLetterSpacing: document.querySelector("#editor-letter-spacing"),
+    editorTextAlign: document.querySelector("#editor-text-align"),
+    editorTextAlignLast: document.querySelector("#editor-text-align-last"),
+    editorTextJustify: document.querySelector("#editor-text-justify"),
+    editorHyphens: document.querySelector("#editor-hyphens"),
     editorFitMode: document.querySelector("#editor-fit-mode"),
     editorWrap: document.querySelector("#editor-wrap"),
     editorOverflow: document.querySelector("#editor-overflow"),
@@ -123,7 +137,12 @@
     textScale: readNumberPreference("whl-text-scale", 1, 0.75, 2),
     fontChoice: readPreference("whl-font-choice", "edition", FONT_CHOICES),
     lineHeightScale: readNumberPreference("whl-line-height-scale", 1, 0.85, 1.6),
+    textAlignment: readPreference("whl-text-alignment", "edition", DISPLAY_ALIGNMENT_CHOICES),
     zoom: readNumberPreference("whl-page-zoom", 1, 0.5, 2.5),
+    backgroundMode: readPreference("whl-page-background-mode", "matched", BACKGROUND_MODE_CHOICES),
+    backgroundColor: readColorPreference("whl-page-background-color", "#eee2c5"),
+    texturePreset: readPreference("whl-page-texture-preset", "fibers", TEXTURE_PRESET_CHOICES),
+    textureStrength: readNumberPreference("whl-page-texture-strength", 0.35, 0, 1),
     zoomAnchor: null,
     fauxFullscreen: false,
     fullscreenActive: false,
@@ -145,6 +164,8 @@
     sizeFrame: 0,
     pageRatio: 0.72,
     pageDisplayWidth: 520,
+    pagePaper: "#eee2c5",
+    pageInk: "#29261e",
     projectConfig: null,
     editorEnabled: false,
     editorActive: false,
@@ -180,6 +201,21 @@
       return Number.isFinite(value) ? clamp(value, minimum, maximum) : fallback;
     } catch {
       return fallback;
+    }
+  }
+
+  function normalizeHexColor(value, fallback = "#eee2c5") {
+    if (typeof value === "string" && SAFE_HEX_COLOR.test(value.trim())) return value.trim().toLowerCase();
+    return typeof fallback === "string" && SAFE_HEX_COLOR.test(fallback.trim())
+      ? fallback.trim().toLowerCase()
+      : "#eee2c5";
+  }
+
+  function readColorPreference(key, fallback) {
+    try {
+      return normalizeHexColor(window.localStorage.getItem(key), fallback);
+    } catch {
+      return normalizeHexColor(fallback);
     }
   }
 
@@ -350,6 +386,35 @@
       emitted = next;
     }
     return channelsToHex(emitted);
+  }
+
+  function resolvePageAppearance(data = {}) {
+    const matchedPaper = cssColor(data?.paper, "#eee2c5");
+    const sampledInk = cssColor(data?.ink, "#29261e");
+    const paper = state.backgroundMode === "solid"
+      ? normalizeHexColor(state.backgroundColor, "#eee2c5")
+      : matchedPaper;
+    return {
+      mode: BACKGROUND_MODE_CHOICES.includes(state.backgroundMode) ? state.backgroundMode : "matched",
+      paper,
+      ink: readableInkColor(paper, sampledInk),
+      sampledInk,
+      texture: TEXTURE_PRESET_CHOICES.includes(state.texturePreset) ? state.texturePreset : "none",
+      textureStrength: clamp(Number(state.textureStrength) || 0, 0, 1)
+    };
+  }
+
+  function applyPageAppearance(data = {}) {
+    const appearance = resolvePageAppearance(data);
+    state.pagePaper = appearance.paper;
+    state.pageInk = appearance.sampledInk;
+    elements.facsimilePage.dataset.backgroundMode = appearance.mode;
+    elements.facsimilePage.dataset.texturePreset = appearance.texture;
+    elements.facsimilePage.style.setProperty("--paper", appearance.paper);
+    elements.facsimilePage.style.setProperty("--page-ink", appearance.ink);
+    elements.facsimilePage.style.setProperty("--texture-strength", String(appearance.textureStrength));
+    elements.facsimilePage.dataset.inkAdjusted = String(appearance.ink !== appearance.sampledInk);
+    return appearance;
   }
 
   function textLanguage(language, layer) {
@@ -793,6 +858,7 @@
     elements.editorOverlay.hidden = true;
     elements.facsimileText.replaceChildren();
     elements.facsimilePage.querySelector(".facsimile-art")?.remove();
+    applyPageAppearance();
     elements.pageConfidence.textContent = "Confidence —";
     delete elements.pageConfidence.dataset.band;
     setMessage(`Loading page ${state.page.toLocaleString()}…`, "loading", true);
@@ -1020,12 +1086,7 @@
     const ratio = dimensions.width / dimensions.height;
     updatePageSizing(ratio);
     elements.facsimilePage.style.setProperty("--page-ratio", String(ratio));
-    const paper = cssColor(data.paper, getComputedStyle(document.documentElement).getPropertyValue("--paper") || "#eee2c5");
-    const sampledInk = cssColor(data.ink, getComputedStyle(document.documentElement).getPropertyValue("--page-ink") || "#29261e");
-    const readableInk = readableInkColor(paper, sampledInk);
-    elements.facsimilePage.style.setProperty("--paper", paper);
-    elements.facsimilePage.style.setProperty("--page-ink", readableInk);
-    elements.facsimilePage.dataset.inkAdjusted = String(readableInk !== sampledInk);
+    applyPageAppearance(data);
     elements.facsimilePage.hidden = false;
     elements.facsimileError.hidden = true;
     elements.facsimilePage.classList.remove("is-loading");
@@ -1175,6 +1236,12 @@
     return 1.17;
   }
 
+  function roleTextAlign(role) {
+    return ["title", "heading", "header", "caption", "footer", "page-number"].includes(role)
+      ? "center"
+      : "start";
+  }
+
   function roleTextBaseSize(role, logicalPageWidth, manifestScale = 1) {
     const scale = clamp(logicalPageWidth / 720, 0.45, 1.5);
     const roleMaximum = ROLE_TEXT_MAXIMUMS[role] ?? 20;
@@ -1214,14 +1281,27 @@
     else region.style.removeProperty("font-family");
     if (Number.isFinite(Number(style.fontWeight))) region.style.fontWeight = String(style.fontWeight);
     else region.style.removeProperty("font-weight");
-    if (typeof style.color === "string") region.style.color = style.color;
-    else region.style.removeProperty("color");
+    if (typeof style.color === "string") {
+      const readableColor = readableInkColor(state.pagePaper, style.color);
+      region.style.color = readableColor;
+      region.dataset.inkAdjusted = String(readableColor !== style.color);
+    } else {
+      region.style.removeProperty("color");
+      delete region.dataset.inkAdjusted;
+    }
     if (Number.isFinite(Number(style.letterSpacing))) region.style.letterSpacing = `${style.letterSpacing}em`;
     else region.style.removeProperty("letter-spacing");
     const nowrap = settings.fit?.wrap === "nowrap";
-    region.style.whiteSpace = nowrap ? "pre" : "pre-wrap";
+    const alignment = state.textAlignment === "edition" ? style.textAlign : state.textAlignment;
+    if (alignment) region.style.textAlign = alignment;
+    else region.style.removeProperty("text-align");
+    if (style.textAlignLast) region.style.textAlignLast = style.textAlignLast;
+    else region.style.removeProperty("text-align-last");
+    if (style.textJustify) region.style.textJustify = style.textJustify;
+    else region.style.removeProperty("text-justify");
+    region.style.whiteSpace = nowrap ? "pre" : alignment === "justify" ? "normal" : "pre-wrap";
     region.style.overflowWrap = nowrap ? "normal" : "break-word";
-    region.style.hyphens = nowrap ? "none" : "auto";
+    region.style.hyphens = nowrap ? "none" : (style.hyphens || "auto");
     if (settings.fit?.wrap === "balance") region.style.textWrap = "balance";
     else if (nowrap) region.style.textWrap = "nowrap";
     else if (settings.fit?.wrap === "normal") region.style.textWrap = "wrap";
@@ -1533,6 +1613,10 @@
     elements.editorFontColor.value = inkChannels ? channelsToHex(inkChannels) : "#29261e";
     elements.editorLineHeight.value = String(Number(resolved.style?.lineHeight) || roleLineHeight(node.dataset.role));
     elements.editorLetterSpacing.value = String(Number(resolved.style?.letterSpacing) || 0);
+    elements.editorTextAlign.value = resolved.style?.textAlign || roleTextAlign(node.dataset.role);
+    elements.editorTextAlignLast.value = resolved.style?.textAlignLast || "auto";
+    elements.editorTextJustify.value = resolved.style?.textJustify || "auto";
+    elements.editorHyphens.value = resolved.style?.hyphens || "auto";
     elements.editorFitMode.value = resolved.fit?.mode || "scroll";
     elements.editorWrap.value = resolved.fit?.wrap || "normal";
     elements.editorOverflow.value = resolved.fit?.overflow || "auto";
@@ -1621,6 +1705,19 @@
     });
     elements.editorOverlay.hidden = true;
     syncEditorPanel();
+  }
+
+  function handleFacsimileEditorClick(event) {
+    if (!state.editorActive) return;
+    const region = event.target.closest?.(".text-region");
+    if (region && elements.facsimileText.contains(region)) {
+      selectEditorRegion(region.dataset.regionId, { focus: false });
+      return;
+    }
+    if (event.target.closest?.(".editor-region-handle")) return;
+    const hadSelection = Boolean(state.selectedRegionId);
+    clearEditorSelection();
+    if (hadSelection) announce("Region selection cleared");
   }
 
   function setEditorActive(active) {
@@ -1994,11 +2091,7 @@
     elements.editorExport.addEventListener("click", exportEditorSettings);
     elements.editorImport.addEventListener("change", () => importEditorSettings(elements.editorImport.files?.[0]));
 
-    elements.facsimileText.addEventListener("click", (event) => {
-      if (!state.editorActive) return;
-      const region = event.target.closest?.(".text-region");
-      if (region && elements.facsimileText.contains(region)) selectEditorRegion(region.dataset.regionId, { focus: false });
-    });
+    elements.facsimilePage.addEventListener("click", handleFacsimileEditorClick);
     elements.facsimileText.addEventListener("keydown", (event) => {
       const region = event.target.closest?.(".text-region");
       if (!region || !state.editorActive) return;
@@ -2246,6 +2339,7 @@
     const textPercent = Math.round(state.textScale * 100);
     const lineHeightPercent = Math.round(state.lineHeightScale * 100);
     const zoomPercent = Math.round(state.zoom * 100);
+    const texturePercent = Math.round(state.textureStrength * 100);
     elements.fontSize.value = String(textPercent);
     elements.fontSizeValue.value = `${textPercent}%`;
     elements.fontSize.setAttribute("aria-valuetext", `${textPercent} percent`);
@@ -2253,10 +2347,20 @@
     elements.lineHeight.value = String(lineHeightPercent);
     elements.lineHeightValue.value = `${state.lineHeightScale.toFixed(2)}×`;
     elements.lineHeight.setAttribute("aria-valuetext", `${state.lineHeightScale.toFixed(2)} times`);
+    elements.alignment.value = state.textAlignment;
     elements.zoom.value = String(zoomPercent);
     elements.zoomValue.value = `${zoomPercent}%`;
     elements.zoom.setAttribute("aria-valuetext", `${zoomPercent} percent`);
+    elements.backgroundMode.value = state.backgroundMode;
+    elements.backgroundColor.value = normalizeHexColor(state.backgroundColor);
+    elements.backgroundColor.disabled = state.backgroundMode !== "solid";
+    elements.texturePreset.value = state.texturePreset;
+    elements.textureStrength.value = String(texturePercent);
+    elements.textureStrengthValue.value = `${texturePercent}%`;
+    elements.textureStrength.setAttribute("aria-valuetext", `${texturePercent} percent`);
+    elements.textureStrength.disabled = state.texturePreset === "none";
     document.body.dataset.readerFont = state.fontChoice;
+    document.body.dataset.readerAlignment = state.textAlignment;
   }
 
   function setTextScale(value, shouldAnnounce = false) {
@@ -2283,6 +2387,14 @@
     if (shouldAnnounce) announce(`Facsimile line height ${state.lineHeightScale.toFixed(2)} times`);
   }
 
+  function setTextAlignment(value, shouldAnnounce = false) {
+    state.textAlignment = DISPLAY_ALIGNMENT_CHOICES.includes(value) ? value : "edition";
+    savePreference("whl-text-alignment", state.textAlignment);
+    syncDisplayControls();
+    scheduleTextFit();
+    if (shouldAnnounce) announce(`Facsimile alignment ${elements.alignment.selectedOptions[0]?.textContent || "edition alignment"}`);
+  }
+
   function setZoom(value, shouldAnnounce = false) {
     if (!state.zoomAnchor) state.zoomAnchor = spreadPosition();
     state.zoom = clamp(Number.parseFloat(value) / 100, 0.5, 2.5);
@@ -2295,17 +2407,70 @@
     }
   }
 
+  function refreshPageAppearance() {
+    applyPageAppearance(state.currentPageData || {});
+    scheduleTextFit();
+  }
+
+  function setBackgroundMode(value, shouldAnnounce = false) {
+    state.backgroundMode = BACKGROUND_MODE_CHOICES.includes(value) ? value : "matched";
+    savePreference("whl-page-background-mode", state.backgroundMode);
+    syncDisplayControls();
+    refreshPageAppearance();
+    if (shouldAnnounce) announce(state.backgroundMode === "solid" ? "Solid facsimile background" : "Facsimile background matched to the scan");
+  }
+
+  function setBackgroundColor(value, shouldAnnounce = false) {
+    if (typeof value !== "string" || !SAFE_HEX_COLOR.test(value.trim())) {
+      syncDisplayControls();
+      return;
+    }
+    state.backgroundColor = normalizeHexColor(value);
+    savePreference("whl-page-background-color", state.backgroundColor);
+    syncDisplayControls();
+    if (state.backgroundMode === "solid") refreshPageAppearance();
+    if (shouldAnnounce) announce(`Solid facsimile color ${state.backgroundColor}`);
+  }
+
+  function setTexturePreset(value, shouldAnnounce = false) {
+    state.texturePreset = TEXTURE_PRESET_CHOICES.includes(value) ? value : "none";
+    savePreference("whl-page-texture-preset", state.texturePreset);
+    syncDisplayControls();
+    refreshPageAppearance();
+    if (shouldAnnounce) announce(`Facsimile paper texture ${elements.texturePreset.selectedOptions[0]?.textContent || "none"}`);
+  }
+
+  function setTextureStrength(value, shouldAnnounce = false) {
+    const parsed = Number.parseFloat(value) / 100;
+    state.textureStrength = Number.isFinite(parsed) ? clamp(parsed, 0, 1) : 0.35;
+    savePreference("whl-page-texture-strength", String(state.textureStrength));
+    syncDisplayControls();
+    refreshPageAppearance();
+    if (shouldAnnounce) announce(`Facsimile texture strength ${Math.round(state.textureStrength * 100)} percent`);
+  }
+
   function resetDisplayPreferences() {
     state.textScale = 1;
     state.fontChoice = "edition";
     state.lineHeightScale = 1;
+    state.textAlignment = "edition";
     state.zoom = 1;
+    state.backgroundMode = "matched";
+    state.backgroundColor = "#eee2c5";
+    state.texturePreset = "fibers";
+    state.textureStrength = 0.35;
     state.zoomAnchor = null;
     savePreference("whl-text-scale", "1");
     savePreference("whl-font-choice", "edition");
     savePreference("whl-line-height-scale", "1");
+    savePreference("whl-text-alignment", "edition");
     savePreference("whl-page-zoom", "1");
+    savePreference("whl-page-background-mode", "matched");
+    savePreference("whl-page-background-color", "#eee2c5");
+    savePreference("whl-page-texture-preset", "fibers");
+    savePreference("whl-page-texture-strength", "0.35");
     syncDisplayControls();
+    refreshPageAppearance();
     updatePageSizing();
     announce("Display settings reset");
   }
@@ -2418,8 +2583,15 @@
     elements.fontFamily.addEventListener("change", () => setFontChoice(elements.fontFamily.value, true));
     elements.lineHeight.addEventListener("input", () => setLineHeight(elements.lineHeight.value));
     elements.lineHeight.addEventListener("change", () => setLineHeight(elements.lineHeight.value, true));
+    elements.alignment.addEventListener("change", () => setTextAlignment(elements.alignment.value, true));
     elements.zoom.addEventListener("input", () => setZoom(elements.zoom.value));
     elements.zoom.addEventListener("change", () => setZoom(elements.zoom.value, true));
+    elements.backgroundMode.addEventListener("change", () => setBackgroundMode(elements.backgroundMode.value, true));
+    elements.backgroundColor.addEventListener("input", () => setBackgroundColor(elements.backgroundColor.value));
+    elements.backgroundColor.addEventListener("change", () => setBackgroundColor(elements.backgroundColor.value, true));
+    elements.texturePreset.addEventListener("change", () => setTexturePreset(elements.texturePreset.value, true));
+    elements.textureStrength.addEventListener("input", () => setTextureStrength(elements.textureStrength.value));
+    elements.textureStrength.addEventListener("change", () => setTextureStrength(elements.textureStrength.value, true));
     elements.displayReset.addEventListener("click", resetDisplayPreferences);
     elements.fullscreenToggle.addEventListener("click", toggleFullscreen);
 
@@ -2499,6 +2671,7 @@
   async function initialize() {
     bindControls();
     syncDisplayControls();
+    applyPageAppearance();
     syncFullscreenState(false);
     setLayer(state.layer);
     setView(state.view);

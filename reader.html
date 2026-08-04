@@ -7,9 +7,9 @@
   <meta name="description" content="A side-by-side reader for original herbal scans and their modern facsimile editions.">
   <title>Facsimile reader — World Herb Library</title>
   <link rel="stylesheet" href="assets/site.css">
-  <link rel="stylesheet" href="assets/reader.css?v=5">
-  <script src="assets/region-settings.js?v=1" defer></script>
-  <script src="assets/reader.js?v=5" defer></script>
+  <link rel="stylesheet" href="assets/reader.css?v=6">
+  <script src="assets/region-settings.js?v=2" defer></script>
+  <script src="assets/reader.js?v=6" defer></script>
 </head>
 <body class="reader-body" data-view="both">
   <a class="skip-link" href="#reader-stage">Skip to the page</a>
@@ -102,6 +102,13 @@
             <option value="sans">System sans serif</option>
           </select>
 
+          <label class="setting-field" for="alignment-control"><span>Alignment</span></label>
+          <select id="alignment-control">
+            <option value="edition">Edition alignment</option>
+            <option value="start">Align to reading edge</option>
+            <option value="justify">Justify prose</option>
+          </select>
+
           <label class="setting-field" for="line-height-control">
             <span>Line height</span>
             <output id="line-height-value" for="line-height-control">1.00×</output>
@@ -113,6 +120,30 @@
             <output id="zoom-value" for="zoom-control">100%</output>
           </label>
           <input id="zoom-control" type="range" min="50" max="250" step="10" value="100">
+
+          <div class="settings-divider" aria-hidden="true"></div>
+
+          <label class="setting-field" for="background-mode-control"><span>Page background</span></label>
+          <select id="background-mode-control">
+            <option value="matched">Match scanned paper</option>
+            <option value="solid">Solid color</option>
+          </select>
+
+          <label class="setting-field" for="background-color-control"><span>Solid color</span></label>
+          <input id="background-color-control" type="color" value="#eee2c5">
+
+          <label class="setting-field" for="texture-preset-control"><span>Paper texture</span></label>
+          <select id="texture-preset-control">
+            <option value="none">None</option>
+            <option value="paper">Soft paper</option>
+            <option value="fibers">Fine fibers</option>
+          </select>
+
+          <label class="setting-field" for="texture-strength-control">
+            <span>Texture strength</span>
+            <output id="texture-strength-value" for="texture-strength-control">35%</output>
+          </label>
+          <input id="texture-strength-control" type="range" min="0" max="100" step="5" value="35">
 
           <button class="settings-reset" id="display-reset" type="button">Reset display</button>
         </fieldset>
@@ -146,8 +177,8 @@
           <div class="facsimile-page is-loading" id="facsimile-page" role="document" aria-label="Facsimile page loading">
             <div class="facsimile-text" id="facsimile-text"></div>
             <div class="editor-region-overlay" id="editor-region-overlay" hidden>
-              <button class="editor-region-handle editor-move-handle" id="editor-move-handle" type="button" aria-label="Move selected region" title="Drag to move; use arrow keys to nudge">Move</button>
-              <button class="editor-region-handle editor-resize-handle" id="editor-resize-handle" type="button" aria-label="Resize selected region" title="Drag to resize; use arrow keys to adjust">↘</button>
+              <button class="editor-region-handle editor-move-handle" id="editor-move-handle" type="button" aria-label="Move selected region" title="Drag to move; use arrow keys to nudge"><span aria-hidden="true">✥</span></button>
+              <button class="editor-region-handle editor-resize-handle" id="editor-resize-handle" type="button" aria-label="Resize selected region" title="Drag to resize; use arrow keys to adjust"><span aria-hidden="true">↘</span></button>
             </div>
           </div>
           <div class="page-error" id="facsimile-error" hidden>
@@ -207,6 +238,22 @@
       <div class="editor-field-row">
         <label class="editor-field" for="editor-letter-spacing"><span>Character spacing <small>(em)</small></span><input id="editor-letter-spacing" data-editor-path="style.letterSpacing" type="number" min="-0.25" max="1" step="0.01" value="0"></label>
         <button class="editor-inherit" type="button" data-editor-clear="style.letterSpacing" aria-label="Inherit character spacing">Inherit</button>
+      </div>
+      <div class="editor-field-row">
+        <label class="editor-field" for="editor-text-align"><span>Alignment</span><select id="editor-text-align" data-editor-path="style.textAlign"><option value="start">Start</option><option value="end">End</option><option value="center">Center</option><option value="justify">Justify</option></select></label>
+        <button class="editor-inherit" type="button" data-editor-clear="style.textAlign" aria-label="Inherit alignment">Inherit</button>
+      </div>
+      <div class="editor-field-row">
+        <label class="editor-field" for="editor-text-align-last"><span>Last line</span><select id="editor-text-align-last" data-editor-path="style.textAlignLast"><option value="auto">Automatic</option><option value="start">Start</option><option value="end">End</option><option value="center">Center</option><option value="justify">Justify</option></select></label>
+        <button class="editor-inherit" type="button" data-editor-clear="style.textAlignLast" aria-label="Inherit last-line alignment">Inherit</button>
+      </div>
+      <div class="editor-field-row">
+        <label class="editor-field" for="editor-text-justify"><span>Justification</span><select id="editor-text-justify" data-editor-path="style.textJustify"><option value="auto">Automatic</option><option value="inter-word">Between words</option><option value="inter-character">Between characters</option></select></label>
+        <button class="editor-inherit" type="button" data-editor-clear="style.textJustify" aria-label="Inherit justification method">Inherit</button>
+      </div>
+      <div class="editor-field-row">
+        <label class="editor-field" for="editor-hyphens"><span>Hyphenation</span><select id="editor-hyphens" data-editor-path="style.hyphens"><option value="none">None</option><option value="manual">Manual marks only</option><option value="auto">Automatic</option></select></label>
+        <button class="editor-inherit" type="button" data-editor-clear="style.hyphens" aria-label="Inherit hyphenation">Inherit</button>
       </div>
     </fieldset>
 

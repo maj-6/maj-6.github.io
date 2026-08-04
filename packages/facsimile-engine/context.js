@@ -7,7 +7,7 @@ export const CONTEXT_SCOPES = Object.freeze([
   "page", "pageSourceRole", "pageCategory", "pageClass", "region"
 ]);
 
-function normalizeScope(scope, path = "context.activeScope") {
+export function normalizeContextScope(scope, path = "context.activeScope") {
   if (!scope || typeof scope !== "object" || Array.isArray(scope)) throw new TypeError(`${path}: must be an object`);
   const kind = scope.kind;
   if (!CONTEXT_SCOPES.includes(kind)) throw new TypeError(`${path}.kind: unsupported scope`);
@@ -52,7 +52,7 @@ export function createContext(value) {
     page: normalizePage(value.page, "context.page"),
     activeRegionId,
     selectedRegionIds,
-    activeScope: normalizeScope(value.activeScope ?? (activeRegionId ? { kind: "region", regionId: activeRegionId } : { kind: "page" })),
+    activeScope: normalizeContextScope(value.activeScope ?? (activeRegionId ? { kind: "region", regionId: activeRegionId } : { kind: "page" })),
     activeEdition,
     activeToolId: assertSafeId(value.activeToolId ?? "select", "context.activeToolId"),
     previewIntent: value.previewIntent === "reader" ? "reader" : "editor"
@@ -72,6 +72,20 @@ export function activateRegion(context, regionId) {
     activeRegionId: id,
     selectedRegionIds,
     activeScope: { kind: "region", regionId: id }
+  });
+}
+
+/** Clear object selection while keeping the active book/page and editor state.
+ * Selection is transient context, so this never creates an undoable project
+ * change and restores page scope for page-level properties. */
+export function clearRegionSelection(context) {
+  if (context.activeRegionId === null
+    && context.selectedRegionIds.length === 0
+    && context.activeScope.kind === "page") return context;
+  return deriveContext(context, {
+    activeRegionId: null,
+    selectedRegionIds: [],
+    activeScope: { kind: "page" }
   });
 }
 

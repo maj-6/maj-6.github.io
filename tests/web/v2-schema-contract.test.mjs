@@ -213,14 +213,28 @@ function representativeEditorProject() {
           id: "banckes.chapter-opener",
           displayName: "Chapter opener",
           priority: 20,
-          components: { "core.typography": { fontWeight: 600 } }
+          components: {
+            "core.typography": {
+              fontWeight: 600,
+              textAlign: "justify",
+              textAlignLast: "start",
+              textJustify: "inter-word",
+              hyphens: "auto"
+            }
+          }
         }
       },
       labels: {
         reviewed: { id: "reviewed", displayName: "Reviewed", color: "#476a50" }
       }
     },
-    components: {},
+    components: {
+      "core.pageAppearance": {
+        mode: "solid",
+        color: "#eee2c5",
+        texture: { kind: "paper", strength: 0.25, scale: 1 }
+      }
+    },
     rules: emptyRules(),
     books: {
       "banckes-1552": {
@@ -333,6 +347,13 @@ function representativeReaderPublication() {
           "37": {
             page: 37,
             displayName: "Leaf 19 recto",
+            components: {
+              "core.pageAppearance": {
+                mode: "solid",
+                color: "#eee2c5",
+                texture: { kind: "paper", strength: 0.25, scale: 1 }
+              }
+            },
             regions: [{
               id: objectRegionId,
               sourceRef: { bookId: "banckes-1552", page: 37, regionId: sourceRegionId, fingerprint },
@@ -397,6 +418,19 @@ test("editor schema rejects unsafe identities, duplicate assignments, and invali
   badTypography.taxonomy.classes["banckes.chapter-opener"].components["core.typography"].fontWeight = 950;
   assertInvalid(editorSchema, badTypography, "known component patches use registry ranges");
 
+  const badJustification = representativeEditorProject();
+  badJustification.taxonomy.classes["banckes.chapter-opener"].components["core.typography"].textAlign = "spread";
+  assertInvalid(editorSchema, badJustification, "typography alignment is a closed vocabulary");
+
+  const badTexture = representativeEditorProject();
+  badTexture.components["core.pageAppearance"].texture.strength = 1.5;
+  assertInvalid(editorSchema, badTexture, "procedural texture strength remains normalized");
+
+  const pageAppearanceOnRegion = representativeEditorProject();
+  pageAppearanceOnRegion.books["banckes-1552"].pages["37"].regions[objectRegionId]
+    .components["core.pageAppearance"] = { mode: "solid" };
+  assertInvalid(editorSchema, pageAppearanceOnRegion, "page presentation cannot be authored on a region");
+
   const orphanedPrefix = representativeEditorProject();
   orphanedPrefix.books["banckes-1552"].pages["37"].regions[objectRegionId]
     .components["render.decoratedInitial"].equivalents.modern = { text: "R", consumePrefix: "R" };
@@ -440,4 +474,24 @@ test("reader schema rejects authoring state, private classification, and malform
   const badRole = representativeReaderPublication();
   badRole.books["banckes-1552"].pages["37"].regions[0].sourceRole = "Decorated Initial";
   assertInvalid(readerSchema, badRole, "source roles remain safe source identifiers");
+
+  const unsafePageAppearance = representativeReaderPublication();
+  unsafePageAppearance.books["banckes-1552"].pages["37"]
+    .components["core.pageAppearance"].color = "url(https://example.invalid/paper.png)";
+  assertInvalid(readerSchema, unsafePageAppearance, "page appearance cannot carry arbitrary CSS or URLs");
+
+  const pageAppearanceOnRegion = representativeReaderPublication();
+  pageAppearanceOnRegion.books["banckes-1552"].pages["37"].regions[0]
+    .components["core.pageAppearance"] = { mode: "solid", color: "#eee2c5" };
+  assertInvalid(readerSchema, pageAppearanceOnRegion, "page components serialize only once on the page");
+
+  const regionComponentOnPage = representativeReaderPublication();
+  regionComponentOnPage.books["banckes-1552"].pages["37"]
+    .components["core.typography"] = { fontSize: 1.2 };
+  assertInvalid(readerSchema, regionComponentOnPage, "resolved region components serialize only on regions");
+
+  const unresolvedAppearance = representativeReaderPublication();
+  unresolvedAppearance.books["banckes-1552"].pages["37"]
+    .components["core.pageAppearance"] = { mode: "solid" };
+  assertInvalid(readerSchema, unresolvedAppearance, "reader page appearance is a fully resolved component");
 });

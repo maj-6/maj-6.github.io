@@ -78,6 +78,18 @@
           "type": "number",
           "minimum": -0.25,
           "maximum": 1
+        },
+        "textAlign": {
+          "enum": ["start", "end", "center", "justify"]
+        },
+        "textAlignLast": {
+          "enum": ["auto", "start", "end", "center", "justify"]
+        },
+        "textJustify": {
+          "enum": ["auto", "inter-word", "inter-character"]
+        },
+        "hyphens": {
+          "enum": ["none", "manual", "auto"]
         }
       }
     },

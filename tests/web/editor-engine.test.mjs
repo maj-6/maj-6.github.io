@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   DECORATED_INITIAL_COMPONENT,
+  PAGE_APPEARANCE_COMPONENT,
   PROJECT_SCHEMA,
   PROJECT_SCHEMA_VERSION,
   PublicationValidationError,
@@ -10,9 +11,11 @@ import {
   RendererRegistry,
   UnsupportedExtensionError,
   activateRegion,
+  clearRegionSelection,
   createContext,
   createDefaultComponentRegistry,
   createFacsimileEngine,
+  evaluatePage,
   evaluateRegion,
   migrateRegionSettingsV1,
   normalizeProject,
@@ -169,6 +172,156 @@ test("context is immutable and right-click activation preserves intentional sele
   assert.ok(Object.isFrozen(active));
   const exclusive = activateRegion(initial, "r3");
   assert.deepEqual(exclusive.selectedRegionIds, ["r3"]);
+});
+
+test("clearing selection restores page context without changing project history", () => {
+  const engine = createFacsimileEngine({ project: fixture() });
+  const before = engine.history.snapshot();
+  const cleared = engine.context.clearRegionSelection(context(["r1", "r2"], "r1"));
+  assert.equal(cleared.activeRegionId, null);
+  assert.deepEqual(cleared.selectedRegionIds, []);
+  assert.deepEqual(cleared.activeScope, { kind: "page" });
+  assert.ok(Object.isFrozen(cleared));
+  assert.deepEqual(engine.history.snapshot(), before);
+  assert.equal(engine.revision, 0);
+  assert.strictEqual(clearRegionSelection(cleared), cleared, "an already-clear context is stable");
+});
+
+test("page appearance cascades independently and publishes once per page", () => {
+  const value = fixture();
+  value.components[PAGE_APPEARANCE_COMPONENT] = {
+    mode: "solid",
+    color: "#f1e3c4",
+    texture: { kind: "paper", strength: 0.2, scale: 1 }
+  };
+  value.books.book.components[PAGE_APPEARANCE_COMPONENT] = { color: "#ead8b5" };
+  value.books.book.pages["1"].components[PAGE_APPEARANCE_COMPONENT] = {
+    color: "#cbb991",
+    texture: { kind: "fibers", scale: 1.4 }
+  };
+  value.workspace.books.book.components[PAGE_APPEARANCE_COMPONENT] = { color: "#decba7" };
+  value.workspace.books.book.pages["1"].components[PAGE_APPEARANCE_COMPONENT] = {
+    color: null,
+    texture: { strength: 0.45 }
+  };
+
+  const components = createDefaultComponentRegistry();
+  const project = normalizeProject(value, components);
+  const evaluated = evaluatePage(project, components, "book", 1);
+  assert.deepEqual(evaluated.components[PAGE_APPEARANCE_COMPONENT], {
+    mode: "solid",
+    color: "#decba7",
+    texture: { kind: "fibers", strength: 0.45, scale: 1.4 }
+  });
+  assert.equal(provenanceFor(evaluated, PAGE_APPEARANCE_COMPONENT, "color").layer, "workspace");
+  assert.equal(provenanceFor(evaluated, PAGE_APPEARANCE_COMPONENT, "color").scope, "book");
+  assert.equal(provenanceFor(evaluated, PAGE_APPEARANCE_COMPONENT, "texture.kind").scope, "page");
+  assert.equal(evaluateRegion(project, components, "book", 1, "r1").components[PAGE_APPEARANCE_COMPONENT], undefined);
+  assert.ok(Object.isFrozen(evaluated.components[PAGE_APPEARANCE_COMPONENT].texture));
+
+  const engine = createFacsimileEngine({ project: value });
+  assert.deepEqual(engine.evaluatePage("book", 1).components[PAGE_APPEARANCE_COMPONENT],
+    evaluated.components[PAGE_APPEARANCE_COMPONENT]);
+  const publication = engine.compilePublication();
+  assert.deepEqual(publication.books.book.pages["1"].components[PAGE_APPEARANCE_COMPONENT],
+    evaluated.components[PAGE_APPEARANCE_COMPONENT]);
+  assert.equal(publication.books.book.pages["1"].regions[0].components[PAGE_APPEARANCE_COMPONENT], undefined);
+  assert.notEqual(publication.contentHash, createFacsimileEngine({ project: fixture() }).compilePublication().contentHash);
+});
+
+test("page appearance is rejected in region and selector scopes", () => {
+  const inRegion = fixture();
+  inRegion.books.book.pages["1"].regions.r1.components[PAGE_APPEARANCE_COMPONENT] = { mode: "solid" };
+  assert.throws(() => normalizeProject(inRegion, createDefaultComponentRegistry()), /does not support scope region/);
+
+  const inRule = fixture();
+  inRule.books.book.pages["1"].rules.categories["visual.ornament.decorated-initial"].components[PAGE_APPEARANCE_COMPONENT] = {
+    mode: "solid"
+  };
+  assert.throws(() => normalizeProject(inRule, createDefaultComponentRegistry()), /does not support scope pageCategory/);
+
+  const engine = createFacsimileEngine({ project: fixture() });
+  assert.throws(() => engine.operators.execute("property.set", context(), {
+    componentId: PAGE_APPEARANCE_COMPONENT,
+    path: ["mode"],
+    value: "solid"
+  }), /does not support scope region/);
+});
+
+test("explicit operator scopes are normalized before indexing rule maps", () => {
+  const engine = createFacsimileEngine({ project: fixture() });
+  const pollutedBefore = Object.hasOwn(Object.prototype, "components");
+  assert.equal(pollutedBefore, false, "test process begins without the pollution sentinel");
+  try {
+    assert.throws(() => engine.operators.execute("property.set", context(), {
+      componentId: "core.typography",
+      path: ["fontWeight"],
+      value: 500,
+      scope: { kind: "bookCategory", categoryId: "__proto__" }
+    }), /arguments\.scope\.categoryId/);
+    assert.equal(Object.hasOwn(Object.prototype, "components"), false);
+  } finally {
+    if (!pollutedBefore) delete Object.prototype.components;
+  }
+
+  assert.throws(() => engine.operators.execute("property.set", context(), {
+    componentId: "core.typography",
+    path: ["fontWeight"],
+    value: 500,
+    scope: { kind: "region", regionId: "missing-region" }
+  }), /unknown region/);
+});
+
+test("component target kinds constrain legal authoring scopes", () => {
+  const components = createDefaultComponentRegistry();
+  assert.throws(() => components.register({
+    id: "vendor.bad-page-target",
+    version: 1,
+    extensionId: "vendor.extension",
+    targetKinds: ["page"],
+    supportedScopes: ["region"],
+    validate: (value) => value
+  }), /supportedScopes contains unsupported value region/);
+
+  components.register({
+    id: "vendor.page-target",
+    version: 1,
+    extensionId: "vendor.extension",
+    targetKinds: ["page"],
+    validate: (value) => value
+  });
+  const definition = components.get("vendor.page-target");
+  assert.deepEqual(definition.supportedScopes, ["project", "book", "page"]);
+  assert.ok(Object.isFrozen(definition.targetKinds));
+  assert.ok(Object.isFrozen(definition.supportedScopes));
+});
+
+test("typography accepts deterministic justification controls", () => {
+  const value = fixture();
+  value.books.book.pages["1"].rules.sourceRoles.body = {
+    components: {
+      "core.typography": {
+        textAlign: "justify",
+        textAlignLast: "start",
+        textJustify: "inter-word",
+        hyphens: "auto"
+      }
+    }
+  };
+  const components = createDefaultComponentRegistry();
+  const evaluated = evaluateRegion(normalizeProject(value, components), components, "book", 1, "r2");
+  assert.deepEqual({
+    textAlign: evaluated.components["core.typography"].textAlign,
+    textAlignLast: evaluated.components["core.typography"].textAlignLast,
+    textJustify: evaluated.components["core.typography"].textJustify,
+    hyphens: evaluated.components["core.typography"].hyphens
+  }, {
+    textAlign: "justify", textAlignLast: "start", textJustify: "inter-word", hyphens: "auto"
+  });
+
+  const invalid = fixture();
+  invalid.components["core.typography"] = { textAlign: "spread" };
+  assert.throws(() => normalizeProject(invalid, components), /unsupported alignment/);
 });
 
 test("cascade is deterministic across class priority, specificity, layers, and provenance", () => {

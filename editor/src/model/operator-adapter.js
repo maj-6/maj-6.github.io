@@ -1,4 +1,7 @@
-import { DECORATED_INITIAL_COMPONENT } from "@whl/facsimile-engine";
+import {
+  DECORATED_INITIAL_COMPONENT,
+  PAGE_APPEARANCE_COMPONENT
+} from "@whl/facsimile-engine";
 
 function cleanLabel(value, maximum = 120) {
   if (typeof value !== "string") return null;
@@ -69,6 +72,13 @@ export function createEngineOperatorAdapter(engine) {
             const nextContext = engine.context.activateRegion(context, payload.regionId);
             return { changed: nextContext !== context, context: nextContext, status: status(`Selected ${payload.regionId}.`) };
           }
+          case "selection.clear": {
+            if (!context.activeRegionId && context.selectedRegionIds.length === 0) {
+              return { changed: false, context, status: status("Selection is already clear.") };
+            }
+            const nextContext = engine.context.clearRegionSelection(context);
+            return { changed: true, context: nextContext, status: status("Selection cleared.") };
+          }
           case "navigation.set-page": {
             const page = engine.project.books[context.bookId]?.pages[String(payload.pageId)];
             if (!page) return { changed: false, context, status: status("That page is unavailable.", "danger") };
@@ -102,6 +112,13 @@ export function createEngineOperatorAdapter(engine) {
             if (!["book", "page", "region"].includes(payload.scope)) return { changed: false, context, status: status("Unsupported render scope.", "danger") };
             const nextContext = engine.context.derive(context, { activeScope: scopeFromName(context, payload.scope) });
             return { changed: true, context: nextContext, status: status(`Render scope: ${payload.scope}.`) };
+          }
+          case "context.set-page-appearance-scope": {
+            if (!["book", "page"].includes(payload.scope)) {
+              return { changed: false, context, status: status("Unsupported page appearance scope.", "danger") };
+            }
+            const nextContext = engine.context.derive(context, { activeScope: scopeFromName(context, payload.scope) });
+            return { changed: true, context: nextContext, status: status(`Page appearance scope: ${payload.scope}.`) };
           }
           case "context.set-text-layer": {
             if (!["modern", "diplomatic"].includes(payload.layer)) return { changed: false, context, status: status("Unsupported text edition.", "danger") };
@@ -173,6 +190,31 @@ export function createEngineOperatorAdapter(engine) {
             }, `Updated ${payload.property}.`);
           case "region.update-box":
             return executeEngine("region.transform", context, { transform: { box: payload.box } }, "Updated region bounds.");
+          case "region.update-transform":
+            return executeEngine("region.transform", context, { transform: payload.transform }, "Updated region transform.");
+          case "page.update-appearance": {
+            const scope = ["book", "page"].includes(payload.scope) ? payload.scope : scopeName(context);
+            if (!["book", "page"].includes(scope)) {
+              return { changed: false, context, status: status("Choose a book or page appearance scope.", "danger") };
+            }
+            return executeEngine("property.set", context, {
+              componentId: PAGE_APPEARANCE_COMPONENT,
+              path: payload.path,
+              value: payload.value,
+              scope: scopeFromName(context, scope)
+            }, `Updated page appearance at ${scope} scope.`);
+          }
+          case "page.clear-appearance": {
+            const scope = ["book", "page"].includes(payload.scope) ? payload.scope : scopeName(context);
+            if (!["book", "page"].includes(scope)) {
+              return { changed: false, context, status: status("Choose a book or page appearance scope.", "danger") };
+            }
+            return executeEngine("property.reset", context, {
+              componentId: PAGE_APPEARANCE_COMPONENT,
+              path: payload.path,
+              scope: scopeFromName(context, scope)
+            }, `Reset page appearance at ${scope} scope.`);
+          }
           case "region.update-text": {
             const regionContext = engine.context.derive(context, {
               activeScope: { kind: "region", regionId: context.activeRegionId }

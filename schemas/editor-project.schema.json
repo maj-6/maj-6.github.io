@@ -110,7 +110,29 @@
         "fontWeight": { "type": "integer", "minimum": 100, "maximum": 900 },
         "color": { "$ref": "#/$defs/color" },
         "lineHeight": { "type": "number", "minimum": 0.5, "maximum": 4 },
-        "letterSpacing": { "type": "number", "minimum": -0.25, "maximum": 1 }
+        "letterSpacing": { "type": "number", "minimum": -0.25, "maximum": 1 },
+        "textAlign": { "enum": ["start", "center", "end", "justify"] },
+        "textAlignLast": { "enum": ["auto", "start", "center", "end", "justify"] },
+        "textJustify": { "enum": ["auto", "inter-word", "inter-character"] },
+        "hyphens": { "enum": ["none", "manual", "auto"] }
+      }
+    },
+    "pageAppearanceTexture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["none", "paper", "fibers"] },
+        "strength": { "type": "number", "minimum": 0, "maximum": 1 },
+        "scale": { "type": "number", "minimum": 0.5, "maximum": 3 }
+      }
+    },
+    "pageAppearance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["matched", "solid"] },
+        "color": { "$ref": "#/$defs/color" },
+        "texture": { "$ref": "#/$defs/pageAppearanceTexture" }
       }
     },
     "transform": {
@@ -223,6 +245,21 @@
       "type": "object",
       "propertyNames": { "$ref": "#/$defs/safeId" },
       "properties": {
+        "core.pageAppearance": { "$ref": "#/$defs/pageAppearance" },
+        "core.typography": { "$ref": "#/$defs/typography" },
+        "core.transform": { "$ref": "#/$defs/transform" },
+        "core.textLayout": { "$ref": "#/$defs/textLayout" },
+        "core.content": { "$ref": "#/$defs/content" },
+        "core.visibility": { "$ref": "#/$defs/visibility" },
+        "render.decoratedInitial": { "$ref": "#/$defs/decoratedInitial" }
+      },
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    },
+    "regionComponentBag": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "properties": {
+        "core.pageAppearance": { "not": {} },
         "core.typography": { "$ref": "#/$defs/typography" },
         "core.transform": { "$ref": "#/$defs/transform" },
         "core.textLayout": { "$ref": "#/$defs/textLayout" },
@@ -250,7 +287,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["components"],
-      "properties": { "components": { "$ref": "#/$defs/componentBag" } }
+      "properties": { "components": { "$ref": "#/$defs/regionComponentBag" } }
     },
     "safeRuleMap": {
       "type": "object",
@@ -366,7 +403,7 @@
         "sourceRef": { "$ref": "#/$defs/sourceRef" },
         "origin": { "enum": ["source", "authored"] },
         "annotations": { "$ref": "#/$defs/annotations" },
-        "components": { "$ref": "#/$defs/componentBag" }
+        "components": { "$ref": "#/$defs/regionComponentBag" }
       }
     },
     "regionMap": {
@@ -422,7 +459,7 @@
           "items": { "$ref": "#/$defs/safeId" }
         },
         "color": { "$ref": "#/$defs/color" },
-        "components": { "$ref": "#/$defs/componentBag" }
+        "components": { "$ref": "#/$defs/regionComponentBag" }
       }
     },
     "categoryMap": {
@@ -444,7 +481,7 @@
           "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
         },
         "priority": { "type": "integer", "minimum": -1000000, "maximum": 1000000 },
-        "components": { "$ref": "#/$defs/componentBag" }
+        "components": { "$ref": "#/$defs/regionComponentBag" }
       }
     },
     "regionClassMap": {
@@ -501,11 +538,17 @@
       "propertyNames": { "$ref": "#/$defs/safeId" },
       "additionalProperties": { "$ref": "#/$defs/jsonObject" }
     },
+    "regionOverlayComponentBag": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "properties": { "core.pageAppearance": { "not": {} } },
+      "additionalProperties": { "$ref": "#/$defs/jsonObject" }
+    },
     "overlayRule": {
       "type": "object",
       "additionalProperties": false,
       "required": ["components"],
-      "properties": { "components": { "$ref": "#/$defs/overlayComponentBag" } }
+      "properties": { "components": { "$ref": "#/$defs/regionOverlayComponentBag" } }
     },
     "safeOverlayRuleMap": {
       "type": "object",
@@ -552,7 +595,7 @@
       "additionalProperties": false,
       "properties": {
         "annotations": { "$ref": "#/$defs/overlayAnnotations" },
-        "components": { "$ref": "#/$defs/overlayComponentBag" }
+        "components": { "$ref": "#/$defs/regionOverlayComponentBag" }
       }
     },
     "regionOverlayMap": {

@@ -1,4 +1,5 @@
 import { CORE_EXTENSION, DECORATED_INITIAL_COMPONENT, createEmptyOperatorRegistry } from "./builtins.js";
+import { normalizeContextScope } from "./context.js";
 import { OperatorPollError } from "./errors.js";
 import { findRegion } from "./project.js";
 import {
@@ -73,17 +74,33 @@ function propertyExecute(environment, reset = false) {
   const before = environment.project;
   const project = clone(before);
   const componentId = assertSafeId(args.componentId, "arguments.componentId");
-  components.get(componentId);
+  const definition = components.get(componentId);
   const path = Array.isArray(args.path) ? args.path.map((item, index) => assertSafeId(item, `arguments.path[${index}]`)) : String(args.path || "").split(".").filter(Boolean);
   if (!path.length) throw new TypeError("arguments.path must address a component field");
-  const target = scopeTarget(project, context, args.scope || context.activeScope);
+  const scope = normalizeContextScope(args.scope || context.activeScope, "arguments.scope");
+  if (!definition.supportedScopes.includes(scope.kind)) {
+    throw new TypeError(`component ${componentId} does not support scope ${scope.kind}`);
+  }
+  if (scope.kind === "region"
+    && !environment.project.books[context.bookId]?.pages[String(context.page)]?.regions[scope.regionId]) {
+    throw new TypeError(`arguments.scope.regionId: unknown region ${scope.regionId}`);
+  }
+  if (["bookCategory", "pageCategory"].includes(scope.kind)
+    && !environment.project.taxonomy.categories[scope.categoryId]) {
+    throw new TypeError(`arguments.scope.categoryId: unknown category ${scope.categoryId}`);
+  }
+  if (["bookClass", "pageClass"].includes(scope.kind)
+    && !environment.project.taxonomy.classes[scope.classId]) {
+    throw new TypeError(`arguments.scope.classId: unknown class ${scope.classId}`);
+  }
+  const target = scopeTarget(project, context, scope);
   target.components ||= {};
   target.components[componentId] ||= {};
   if (reset) deletePath(target.components[componentId], path);
   else setPath(target.components[componentId], path, args.value);
   pruneEmpty(project.workspace);
   project.workspace ||= { components: {}, rules: { sourceRoles: {}, categories: {}, classes: {} }, books: {} };
-  return result(before, project, components.get(componentId).dirtyTags || ["layout", "paint", "publication"]);
+  return result(before, project, definition.dirtyTags || ["layout", "paint", "publication"]);
 }
 
 function annotationSet(environment, field, transform) {

@@ -1,5 +1,5 @@
 import { PublicationValidationError, UnsupportedExtensionError } from "./errors.js";
-import { evaluateRegion } from "./cascade.js";
+import { evaluatePage, evaluateRegion } from "./cascade.js";
 import { clone, immutableClone, isPlainObject, stableStringify } from "./utils.js";
 
 export const READER_PUBLICATION_SCHEMA = "whl-reader-publication/1";
@@ -82,10 +82,12 @@ function categoryProjection(category) {
   };
 }
 
-function readerSafeComponents(evaluated, componentRegistry) {
+function readerSafeComponents(evaluated, componentRegistry, targetKind) {
   const result = {};
   for (const definition of componentRegistry.entries()) {
-    if (definition.readerSafe !== true || !Object.hasOwn(evaluated.components, definition.id)) continue;
+    if (definition.readerSafe !== true
+      || !definition.targetKinds.includes(targetKind)
+      || !Object.hasOwn(evaluated.components, definition.id)) continue;
     const value = evaluated.components[definition.id];
     const serialized = definition.serializeForReader(clone(value));
     if (!isPlainObject(serialized)) {
@@ -249,6 +251,7 @@ export function compileReaderPublication(project, componentRegistry, rendererReg
   for (const [bookId, book] of Object.entries(project.books)) {
     const pages = {};
     for (const [pageKey, page] of Object.entries(book.pages)) {
+      const evaluatedPage = evaluatePage(project, componentRegistry, bookId, Number(pageKey));
       const evaluatedById = new Map();
       const getEvaluated = (regionId) => {
         if (!evaluatedById.has(regionId)) evaluatedById.set(regionId, evaluateRegion(project, componentRegistry, bookId, Number(pageKey), regionId));
@@ -283,7 +286,7 @@ export function compileReaderPublication(project, componentRegistry, rendererReg
             ...(evaluated.annotations.displayName ? { displayName: evaluated.annotations.displayName } : {}),
             ...(evaluated.categoryId ? { categoryId: evaluated.categoryId } : {})
           },
-          components: readerSafeComponents(evaluated, componentRegistry),
+          components: readerSafeComponents(evaluated, componentRegistry, "region"),
           ...(accessible.renderer ? { renderer: accessible.renderer } : {}),
           diagnostics: regionDiagnostics
         });
@@ -292,6 +295,7 @@ export function compileReaderPublication(project, componentRegistry, rendererReg
       pages[pageKey] = {
         page: Number(pageKey),
         ...(page.displayName ? { displayName: page.displayName } : {}),
+        components: readerSafeComponents(evaluatedPage, componentRegistry, "page"),
         regions
       };
     }

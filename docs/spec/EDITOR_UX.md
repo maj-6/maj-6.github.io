@@ -58,6 +58,10 @@ transform. Text editing honors IME composition and uses Ctrl/Cmd+Enter to
 commit. Arrow keys navigate pages only when focus is not owned by a control,
 editable region, menu, or pannable viewport.
 
+In Select mode, clicking the blank page stage (outside every region) clears
+the region selection and returns Properties to page context. Escape also
+clears a non-modal selection. Neither action creates undo history.
+
 ## 4. Top bar
 
 Use Blueprint `Navbar`, `Button`, `ButtonGroup`, `Tabs`, `Select`, and `Tag`.
@@ -106,9 +110,12 @@ The central viewport keeps the scan and facsimile directly adjacent and shares
 pan/zoom when both are shown. Controls toggle scan, facsimile, both, region
 boxes, reading order, confidence, and category colors.
 
-The active region has a strong outline and handles. Other selected regions use
-a quieter outline. Category color is an overlay aid only and must not alter the
-published facsimile.
+The active region has a clear outline and compact edge/corner transform
+handles. Other selected regions use a quieter outline. Move/resize affordances
+remain low-contrast until hover, focus, or active transform; they use icons and
+tooltips instead of persistent text labels. Touch/coarse-pointer targets remain
+large enough for access without visually dominating the page. Category color
+is an overlay aid only and must not alter the published facsimile.
 
 Pointer transforms are previews. The engine receives one confirmed transform
 operator, not every pointer move. Numeric transform fields and keyboard nudging
@@ -165,7 +172,8 @@ sections:
 1. **Object** — immutable ID, source reference, origin, display name;
 2. **Classification** — source role, category, classes, labels, collections;
 3. **Content** — edition text, relations, continuation behavior;
-4. **Typography** — font, size, weight, color, line height, spacing;
+4. **Typography** — font, size, weight, color, line height, character spacing,
+   alignment, last-line alignment, justification method, and hyphenation;
 5. **Transform** — normalized box, translation, scaling, alignment;
 6. **Text layout** — fit, wrapping, overflow, width, minimum type scale;
 7. **Rendering** — renderer-specific panels whose `poll` succeeds;
@@ -187,6 +195,13 @@ value into the scope. Provenance opens a popover containing the full cascade.
 
 Blueprint `FormGroup`, `NumericInput`, `HTMLSelect`, `TagInput`, `Switch`,
 `Slider`, `Callout`, `Popover`, `Collapse`, and `Divider` fit these panels.
+
+When no region is selected, Properties exposes page-owned settings rather than
+an empty-state dead end. The Page Appearance section supports book or page
+scope, matched-paper or solid-color mode, and optional procedural paper/fiber
+texture with strength and scale. Solid color affects only the facsimile sheet;
+the adjacent original scan is unchanged. Color controls must maintain readable
+text contrast or surface an explicit warning and safe preview fallback.
 
 ## 9. Decorated-initial panel
 
