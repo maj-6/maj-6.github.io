@@ -2,6 +2,7 @@
   "use strict";
 
   const CATALOG_PATH = "data/catalog.json";
+  const FONT_CHOICES = ["edition", "georgia", "palatino", "sans"];
   const catalogUrl = new URL(CATALOG_PATH, window.location.href);
   const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
 
@@ -21,7 +22,11 @@
     layerInputs: [...document.querySelectorAll('input[name="text-layer"]')],
     layoutToggle: document.querySelector("#layout-toggle"),
     viewButtons: [...document.querySelectorAll(".view-switcher button[data-view]")],
+    panelHeaders: [...document.querySelectorAll(".panel-header")],
+    shell: document.querySelector("#reader-shell"),
+    controls: document.querySelector("#reader-controls"),
     spread: document.querySelector("#page-spread"),
+    spreadScroll: document.querySelector("#spread-scroll"),
     message: document.querySelector("#reader-message"),
     scanImage: document.querySelector("#scan-page"),
     scanLoading: document.querySelector("#scan-loading"),
@@ -32,6 +37,19 @@
     pageConfidence: document.querySelector("#page-confidence"),
     sourceLink: document.querySelector("#source-link"),
     filmstrip: document.querySelector("#filmstrip"),
+    filmstripShell: document.querySelector(".filmstrip-shell"),
+    readingSettings: document.querySelector("#reading-settings"),
+    fontSize: document.querySelector("#font-size-control"),
+    fontSizeValue: document.querySelector("#font-size-value"),
+    fontFamily: document.querySelector("#font-family-control"),
+    lineHeight: document.querySelector("#line-height-control"),
+    lineHeightValue: document.querySelector("#line-height-value"),
+    zoom: document.querySelector("#zoom-control"),
+    zoomValue: document.querySelector("#zoom-value"),
+    zoomHelp: document.querySelector("#zoom-help"),
+    displayReset: document.querySelector("#display-reset"),
+    fullscreenToggle: document.querySelector("#fullscreen-toggle"),
+    fullscreenLabel: document.querySelector("#fullscreen-label"),
     live: document.querySelector("#reader-live"),
     keyboardHint: document.querySelector("#keyboard-hint")
   };
@@ -46,6 +64,13 @@
     layer: readPreference("whl-text-layer", "modern", ["modern", "diplomatic"]),
     view: readPreference("whl-page-view", "both", ["scan", "facsimile", "both"]),
     showLayout: readPreference("whl-show-layout", "false", ["true", "false"]) === "true",
+    textScale: readNumberPreference("whl-text-scale", 1, 0.75, 2),
+    fontChoice: readPreference("whl-font-choice", "edition", FONT_CHOICES),
+    lineHeightScale: readNumberPreference("whl-line-height-scale", 1, 0.85, 1.6),
+    zoom: readNumberPreference("whl-page-zoom", 1, 0.5, 2.5),
+    zoomAnchor: null,
+    fauxFullscreen: false,
+    fullscreenActive: false,
     currentPageData: null,
     currentPageDataUrl: null,
     pageController: null,
@@ -61,6 +86,7 @@
     rangeTimer: 0,
     messageTimer: 0,
     fitFrame: 0,
+    sizeFrame: 0,
     pageRatio: 0.72
   };
 
@@ -68,6 +94,15 @@
     try {
       const value = window.localStorage.getItem(key);
       return allowed.includes(value) ? value : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function readNumberPreference(key, fallback, minimum, maximum) {
+    try {
+      const value = Number.parseFloat(window.localStorage.getItem(key));
+      return Number.isFinite(value) ? clamp(value, minimum, maximum) : fallback;
     } catch {
       return fallback;
     }
@@ -301,10 +336,10 @@
   }
 
   function updatePageControls() {
-    elements.pageInput.value = String(state.page);
     elements.pageInput.max = String(state.totalPages);
-    elements.pageRange.value = String(state.page);
+    elements.pageInput.value = String(state.page);
     elements.pageRange.max = String(state.totalPages);
+    elements.pageRange.value = String(state.page);
     elements.pageTotal.textContent = `of ${state.totalPages.toLocaleString()}`;
     elements.previous.disabled = state.page <= 1;
     elements.next.disabled = state.page >= state.totalPages;
@@ -755,24 +790,107 @@
   function scheduleTextFit() {
     window.cancelAnimationFrame(state.fitFrame);
     state.fitFrame = window.requestAnimationFrame(() => {
-      elements.facsimileText.querySelectorAll(".text-region").forEach(fitTextRegion);
+      const regions = [...elements.facsimileText.querySelectorAll(".text-region")];
+      const pending = regions.filter((region) => !Number.isFinite(Number.parseFloat(region.dataset.referenceSizeRatio)));
+      if (pending.length) {
+        elements.facsimileText.classList.add("is-reference-fit");
+        pending.forEach(fitReferenceTextRegion);
+        elements.facsimileText.classList.remove("is-reference-fit");
+      }
+      regions.forEach(applyTextRegionPreferences);
     });
   }
 
-  function updatePageSizing(ratio = state.pageRatio) {
-    state.pageRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 0.72;
-    const mobile = window.matchMedia?.("(max-width: 850px)")?.matches ?? window.innerWidth <= 850;
-    const reservedHeight = mobile ? 285 : 260;
-    const availableHeight = Math.max(320, window.innerHeight - reservedHeight);
-    const maximumWidth = clamp(Math.round(availableHeight * state.pageRatio), 220, 830);
-    document.documentElement.style.setProperty("--page-ratio", String(state.pageRatio));
-    document.documentElement.style.setProperty("--page-max-width", `${maximumWidth}px`);
+  function spreadPosition() {
+    const scrollWidth = elements.spreadScroll.scrollWidth || 1;
+    const scrollHeight = elements.spreadScroll.scrollHeight || 1;
+    return {
+      x: (elements.spreadScroll.scrollLeft + (elements.spreadScroll.clientWidth / 2)) / scrollWidth,
+      y: (elements.spreadScroll.scrollTop + (elements.spreadScroll.clientHeight / 2)) / scrollHeight
+    };
   }
 
-  function fitTextRegion(region) {
+  function restoreSpreadPosition(position) {
+    if (!position) return;
+    const left = (position.x * elements.spreadScroll.scrollWidth) - (elements.spreadScroll.clientWidth / 2);
+    const top = (position.y * elements.spreadScroll.scrollHeight) - (elements.spreadScroll.clientHeight / 2);
+    elements.spreadScroll.scrollTo({ left: Math.max(0, left), top: Math.max(0, top), behavior: "auto" });
+  }
+
+  function usesTwoPageSpread() {
+    const narrow = window.matchMedia?.("(max-width: 850px)")?.matches ?? window.innerWidth <= 850;
+    const fullscreenLandscape = isReaderFullscreen()
+      && state.view === "both"
+      && window.innerWidth >= 700
+      && window.innerWidth > window.innerHeight;
+    return !narrow || fullscreenLandscape;
+  }
+
+  function updateSpreadAccessibility(twoUp = usesTwoPageSpread()) {
+    const narrow = window.matchMedia?.("(max-width: 850px)")?.matches ?? window.innerWidth <= 850;
+    const visibleView = narrow && !twoUp ? state.view : "both";
+    if (visibleView === "scan") {
+      elements.spreadScroll.setAttribute("aria-label", "Original scan page");
+      elements.zoomHelp.textContent = "When zoomed, focus this region and use the arrow keys or pointer gestures to pan across the scan.";
+    } else if (visibleView === "facsimile") {
+      elements.spreadScroll.setAttribute("aria-label", "Facsimile page");
+      elements.zoomHelp.textContent = "When zoomed, focus this region and use the arrow keys or pointer gestures to pan across the facsimile.";
+    } else {
+      elements.spreadScroll.setAttribute("aria-label", twoUp ? "Original and facsimile page spread" : "Original and facsimile pages");
+      elements.zoomHelp.textContent = twoUp
+        ? "When zoomed, focus this region and use the arrow keys or pointer gestures to pan across both pages."
+        : "When zoomed, focus this region and use the arrow keys or pointer gestures to pan through both pages.";
+    }
+  }
+
+  function syncPanelHeaderHeights() {
+    elements.panelHeaders.forEach((header) => header.style.removeProperty("min-height"));
+    if (!usesTwoPageSpread()) return;
+    const maximum = Math.ceil(Math.max(...elements.panelHeaders.map((header) => header.getBoundingClientRect().height)));
+    elements.panelHeaders.forEach((header) => { header.style.minHeight = `${maximum}px`; });
+  }
+
+  function updatePageSizing(ratio = state.pageRatio, preservePosition = true, positionOverride = null) {
+    const position = positionOverride || (preservePosition ? spreadPosition() : null);
+    state.pageRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 0.72;
+    const mobile = window.matchMedia?.("(max-width: 850px)")?.matches ?? window.innerWidth <= 850;
+    const fullscreen = isReaderFullscreen();
+    const controlsHeight = elements.controls.offsetHeight || (mobile ? 150 : 62);
+    const headerHeight = fullscreen ? 0 : (document.querySelector(".reader-header")?.offsetHeight || 72);
+    const filmstripHeight = fullscreen ? 0 : (elements.filmstripShell?.offsetHeight || 82);
+    const reservedHeight = controlsHeight + headerHeight + filmstripHeight + (fullscreen ? 18 : 42);
+    const availableHeight = Math.max(mobile ? 280 : 320, window.innerHeight - reservedHeight);
+    const scrollerWidth = elements.spreadScroll.clientWidth || window.innerWidth;
+    const twoUp = usesTwoPageSpread();
+    const pageColumns = twoUp ? 2 : 1;
+    const widthBound = Math.max(180, (scrollerWidth - (twoUp ? 2 : 0)) / pageColumns);
+    const baseWidth = clamp(Math.min(availableHeight * state.pageRatio, widthBound), 180, 830);
+    const displayWidth = Math.round(baseWidth * state.zoom);
+    document.documentElement.style.setProperty("--page-ratio", String(state.pageRatio));
+    document.documentElement.style.setProperty("--page-base-width", `${Math.round(baseWidth)}px`);
+    document.documentElement.style.setProperty("--page-display-width", `${displayWidth}px`);
+    document.documentElement.style.setProperty("--spread-max-height", `${Math.round(availableHeight + 54)}px`);
+    updateSpreadAccessibility(twoUp);
+    window.cancelAnimationFrame(state.sizeFrame);
+    state.sizeFrame = window.requestAnimationFrame(() => {
+      syncPanelHeaderHeights();
+      restoreSpreadPosition(position);
+      scheduleTextFit();
+    });
+  }
+
+  function roleLineHeight(role) {
+    if (["title", "heading", "header"].includes(role)) return 1.04;
+    if (role === "caption") return 1.12;
+    if (["marginalia", "note", "footnote", "catch-word", "signature-mark"].includes(role)) return 1.08;
+    return 1.17;
+  }
+
+  function fitReferenceTextRegion(region) {
     if (!region.textContent || region.clientWidth < 2 || region.clientHeight < 2) return;
     const pageWidth = elements.facsimilePage.clientWidth || 700;
-    const scale = clamp(pageWidth / 720, 0.45, 1.5);
+    const logicalPageWidth = pageWidth / state.zoom;
+    const scale = clamp(logicalPageWidth / 720, 0.45, 1.5);
     const role = region.dataset.role;
     const roleMaximums = {
       title: 42,
@@ -786,32 +904,47 @@
     };
     const baseMaximum = roleMaximums[role] ?? 20;
     const manifestScale = clamp(Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--facsimile-body-scale")) || 1, 0.75, 1.35);
-    const minimum = 12;
+    const minimum = 12 * state.zoom;
     let low = minimum;
-    let high = Math.max(low, baseMaximum * scale * manifestScale);
-    region.style.fontSize = `${low}px`;
-
-    const fits = () => region.scrollHeight <= region.clientHeight + 1 && region.scrollWidth <= region.clientWidth + 1;
-    if (!fits()) {
-      region.classList.add("is-overflowing");
-      region.tabIndex = 0;
-      region.setAttribute("aria-describedby", "overflow-help");
-      region.title = "Scroll within this region to read the complete text.";
-      return;
-    }
-
+    let high = Math.max(low, baseMaximum * scale * manifestScale * state.zoom);
     region.classList.remove("is-overflowing");
     region.removeAttribute("tabindex");
     region.removeAttribute("aria-describedby");
     region.removeAttribute("title");
+    region.style.fontSize = `${low}px`;
 
-    for (let iteration = 0; iteration < 10; iteration += 1) {
-      const middle = (low + high) / 2;
-      region.style.fontSize = `${middle}px`;
-      if (fits()) low = middle;
-      else high = middle;
+    const fits = () => region.scrollHeight <= region.clientHeight + 1 && region.scrollWidth <= region.clientWidth + 1;
+    if (fits()) {
+      for (let iteration = 0; iteration < 10; iteration += 1) {
+        const middle = (low + high) / 2;
+        region.style.fontSize = `${middle}px`;
+        if (fits()) low = middle;
+        else high = middle;
+      }
     }
-    region.style.fontSize = `${Math.floor(low * 10) / 10}px`;
+    const referenceSize = Math.floor(low * 10) / 10;
+    region.dataset.referenceSizeRatio = String(referenceSize / pageWidth);
+  }
+
+  function applyTextRegionPreferences(region) {
+    if (!region.textContent || region.clientWidth < 2 || region.clientHeight < 2) return;
+    const ratio = Number.parseFloat(region.dataset.referenceSizeRatio);
+    if (!Number.isFinite(ratio)) return;
+    const pageWidth = elements.facsimilePage.clientWidth || 700;
+    const requestedSize = Math.max(4, ratio * pageWidth * state.textScale);
+    region.style.fontSize = `${Math.floor(requestedSize * 10) / 10}px`;
+    region.style.lineHeight = String(roleLineHeight(region.dataset.role) * state.lineHeightScale);
+    const fits = region.scrollHeight <= region.clientHeight + 1 && region.scrollWidth <= region.clientWidth + 1;
+    region.classList.toggle("is-overflowing", !fits);
+    if (fits) {
+      region.removeAttribute("tabindex");
+      region.removeAttribute("aria-describedby");
+      region.removeAttribute("title");
+    } else {
+      region.tabIndex = 0;
+      region.setAttribute("aria-describedby", "overflow-help");
+      region.title = "Scroll within this region to read the complete text.";
+    }
   }
 
   function cachePage(url, data) {
@@ -980,7 +1113,145 @@
     document.body.dataset.view = view;
     savePreference("whl-page-view", view);
     elements.viewButtons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.view === view)));
-    window.requestAnimationFrame(() => window.requestAnimationFrame(scheduleTextFit));
+    updatePageSizing();
+  }
+
+  function syncDisplayControls() {
+    const textPercent = Math.round(state.textScale * 100);
+    const lineHeightPercent = Math.round(state.lineHeightScale * 100);
+    const zoomPercent = Math.round(state.zoom * 100);
+    elements.fontSize.value = String(textPercent);
+    elements.fontSizeValue.value = `${textPercent}%`;
+    elements.fontSize.setAttribute("aria-valuetext", `${textPercent} percent`);
+    elements.fontFamily.value = state.fontChoice;
+    elements.lineHeight.value = String(lineHeightPercent);
+    elements.lineHeightValue.value = `${state.lineHeightScale.toFixed(2)}×`;
+    elements.lineHeight.setAttribute("aria-valuetext", `${state.lineHeightScale.toFixed(2)} times`);
+    elements.zoom.value = String(zoomPercent);
+    elements.zoomValue.value = `${zoomPercent}%`;
+    elements.zoom.setAttribute("aria-valuetext", `${zoomPercent} percent`);
+    document.body.dataset.readerFont = state.fontChoice;
+  }
+
+  function setTextScale(value, shouldAnnounce = false) {
+    state.textScale = clamp(Number.parseFloat(value) / 100, 0.75, 2);
+    savePreference("whl-text-scale", String(state.textScale));
+    syncDisplayControls();
+    scheduleTextFit();
+    if (shouldAnnounce) announce(`Facsimile text size ${Math.round(state.textScale * 100)} percent`);
+  }
+
+  function setFontChoice(value, shouldAnnounce = false) {
+    state.fontChoice = FONT_CHOICES.includes(value) ? value : "edition";
+    savePreference("whl-font-choice", state.fontChoice);
+    syncDisplayControls();
+    scheduleTextFit();
+    if (shouldAnnounce) announce(`Facsimile typeface ${elements.fontFamily.selectedOptions[0]?.textContent || "edition typography"}`);
+  }
+
+  function setLineHeight(value, shouldAnnounce = false) {
+    state.lineHeightScale = clamp(Number.parseFloat(value) / 100, 0.85, 1.6);
+    savePreference("whl-line-height-scale", String(state.lineHeightScale));
+    syncDisplayControls();
+    scheduleTextFit();
+    if (shouldAnnounce) announce(`Facsimile line height ${state.lineHeightScale.toFixed(2)} times`);
+  }
+
+  function setZoom(value, shouldAnnounce = false) {
+    if (!state.zoomAnchor) state.zoomAnchor = spreadPosition();
+    state.zoom = clamp(Number.parseFloat(value) / 100, 0.5, 2.5);
+    savePreference("whl-page-zoom", String(state.zoom));
+    syncDisplayControls();
+    updatePageSizing(state.pageRatio, true, state.zoomAnchor);
+    if (shouldAnnounce) {
+      state.zoomAnchor = null;
+      announce(`Page zoom ${Math.round(state.zoom * 100)} percent`);
+    }
+  }
+
+  function resetDisplayPreferences() {
+    state.textScale = 1;
+    state.fontChoice = "edition";
+    state.lineHeightScale = 1;
+    state.zoom = 1;
+    state.zoomAnchor = null;
+    savePreference("whl-text-scale", "1");
+    savePreference("whl-font-choice", "edition");
+    savePreference("whl-line-height-scale", "1");
+    savePreference("whl-page-zoom", "1");
+    syncDisplayControls();
+    updatePageSizing();
+    announce("Display settings reset");
+  }
+
+  function nativeFullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+
+  function isReaderFullscreen() {
+    return state.fauxFullscreen || nativeFullscreenElement() === elements.shell;
+  }
+
+  function syncFullscreenState(shouldAnnounce = true) {
+    const active = isReaderFullscreen();
+    const changed = active !== state.fullscreenActive;
+    state.fullscreenActive = active;
+    elements.shell.classList.toggle("is-faux-fullscreen", state.fauxFullscreen);
+    document.body.classList.toggle("has-reader-fullscreen", active);
+    elements.fullscreenToggle.setAttribute("aria-pressed", String(active));
+    elements.fullscreenToggle.setAttribute("aria-label", "Full screen");
+    elements.fullscreenToggle.title = active ? "Exit full screen" : "Enter full screen";
+    elements.fullscreenLabel.textContent = active ? "Exit full screen" : "Full screen";
+    if (active) elements.readingSettings.open = false;
+    updatePageSizing();
+    if (changed && shouldAnnounce) announce(active ? "Full screen reader opened" : "Full screen reader closed");
+    if (changed && !active) {
+      window.requestAnimationFrame(() => elements.fullscreenToggle.focus({ preventScroll: true }));
+    }
+  }
+
+  function enterFauxFullscreen() {
+    if (nativeFullscreenElement() === elements.shell) return;
+    state.fauxFullscreen = true;
+    syncFullscreenState();
+  }
+
+  function exitFauxFullscreen() {
+    if (!state.fauxFullscreen) return;
+    state.fauxFullscreen = false;
+    syncFullscreenState();
+  }
+
+  function toggleFullscreen() {
+    const nativeElement = nativeFullscreenElement();
+    if (state.fauxFullscreen) {
+      exitFauxFullscreen();
+      return;
+    }
+    if (nativeElement === elements.shell) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) {
+        try {
+          const result = exit.call(document);
+          result?.catch?.(() => syncFullscreenState());
+        } catch {
+          syncFullscreenState();
+        }
+      }
+      return;
+    }
+
+    const request = elements.shell.requestFullscreen || elements.shell.webkitRequestFullscreen;
+    if (!request) {
+      enterFauxFullscreen();
+      return;
+    }
+    try {
+      const result = request.call(elements.shell);
+      result?.catch?.(() => enterFauxFullscreen());
+    } catch {
+      enterFauxFullscreen();
+    }
   }
 
   function bindControls() {
@@ -1016,12 +1287,43 @@
       announce(state.showLayout ? "Layout regions shown" : "Layout regions hidden");
     });
     elements.viewButtons.forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
+    elements.fontSize.addEventListener("input", () => setTextScale(elements.fontSize.value));
+    elements.fontSize.addEventListener("change", () => setTextScale(elements.fontSize.value, true));
+    elements.fontFamily.addEventListener("change", () => setFontChoice(elements.fontFamily.value, true));
+    elements.lineHeight.addEventListener("input", () => setLineHeight(elements.lineHeight.value));
+    elements.lineHeight.addEventListener("change", () => setLineHeight(elements.lineHeight.value, true));
+    elements.zoom.addEventListener("input", () => setZoom(elements.zoom.value));
+    elements.zoom.addEventListener("change", () => setZoom(elements.zoom.value, true));
+    elements.displayReset.addEventListener("click", resetDisplayPreferences);
+    elements.fullscreenToggle.addEventListener("click", toggleFullscreen);
+
+    ["fullscreenchange", "webkitfullscreenchange"].forEach((eventName) => {
+      document.addEventListener(eventName, () => {
+        if (nativeFullscreenElement() === elements.shell) state.fauxFullscreen = false;
+        syncFullscreenState();
+      });
+    });
+    ["fullscreenerror", "webkitfullscreenerror"].forEach((eventName) => {
+      document.addEventListener(eventName, () => {
+        if (!isReaderFullscreen()) enterFauxFullscreen();
+      });
+    });
 
     window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && state.fauxFullscreen) {
+        event.preventDefault();
+        if (elements.readingSettings.open) {
+          elements.readingSettings.open = false;
+          announce("Display settings closed");
+          return;
+        }
+        exitFauxFullscreen();
+        return;
+      }
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement || target instanceof HTMLButtonElement || target?.isContentEditable) return;
-      if (target?.closest?.("a, summary, [role='button'], .text-region.is-overflowing")) return;
+      if (target === elements.spreadScroll || target?.closest?.("a, summary, [role='button'], .text-region.is-overflowing, #spread-scroll")) return;
       const actions = {
         ArrowLeft: () => setPage(state.page - 1),
         ArrowRight: () => setPage(state.page + 1)
@@ -1051,11 +1353,14 @@
       updatePageSizing();
       scheduleTextFit();
     }, { passive: true });
+    window.addEventListener("orientationchange", () => updatePageSizing(), { passive: true });
+    window.visualViewport?.addEventListener("resize", () => updatePageSizing(), { passive: true });
   }
 
   async function initialize() {
     bindControls();
-    updatePageSizing();
+    syncDisplayControls();
+    syncFullscreenState(false);
     setLayer(state.layer);
     setView(state.view);
     elements.layoutToggle.checked = state.showLayout;
