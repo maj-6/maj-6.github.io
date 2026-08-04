@@ -64,6 +64,8 @@ test("reader exposes all required navigation and comparison controls", () => {
     "display-reset",
     "fullscreen-toggle",
     "spread-scroll",
+    "source-link",
+    "page-confidence",
     "scan-page",
     "facsimile-page",
     "filmstrip",
@@ -107,20 +109,60 @@ test("reader persists typography while preserving explicit user sizing", () => {
   assert.match(readerJs, /readNumberPreference/);
   assert.match(readerJs, /FONT_CHOICES\.includes/);
   assert.match(readerJs, /document\.body\.dataset\.readerFont/);
-  assert.match(readerJs, /referenceSizeRatio/);
-  assert.match(readerJs, /ratio \* pageWidth \* state\.textScale/);
+  assert.match(readerJs, /ROLE_TEXT_MAXIMUMS/);
+  assert.match(readerJs, /roleTextBaseSize/);
+  assert.match(readerJs, /displayTextSize/);
+  assert.match(readerJs, /function scheduleTextFit\(pageWidth = state\.pageDisplayWidth\)/);
+  assert.match(readerJs, /new ResizeObserver\(\(\) => scheduleTextFit\(\)\)/);
+  assert.doesNotMatch(readerJs, /new ResizeObserver\(scheduleTextFit\)/);
   assert.match(readerJs, /region\.style\.fontSize = `\$\{Math\.floor\(requestedSize \* 10\) \/ 10\}px`/);
   assert.match(readerJs, /roleLineHeight\(region\.dataset\.role\) \* state\.lineHeightScale/);
   assert.match(readerJs, /region\.style\.lineHeight = String\(roleLineHeight/);
-  assert.match(readerJs, /syncPanelHeaderHeights/);
+  assert.doesNotMatch(readerJs, /referenceSizeRatio|fitReferenceTextRegion/);
   assert.match(readerJs, /elements\.fontSize\.addEventListener\("input", \(\) => setTextScale/);
   assert.match(readerJs, /elements\.fontFamily\.addEventListener\("change", \(\) => setFontChoice/);
   assert.match(readerJs, /elements\.lineHeight\.addEventListener\("input", \(\) => setLineHeight/);
   assert.match(readerJs, /elements\.displayReset\.addEventListener\("click", resetDisplayPreferences\)/);
   assert.match(readerCss, /data-reader-font="georgia"/);
   assert.match(readerCss, /data-reader-font="sans"/);
-  assert.match(readerCss, /\.facsimile-text\.is-reference-fit/);
+  assert.doesNotMatch(readerCss, /\.facsimile-text\.is-reference-fit/);
   assert.match(readerCss, /\.reading-settings:not\(\[open\]\) \.reading-settings-card\s*\{[^}]*display: none/);
+});
+
+test("text preferences apply to subpixel regions and scale exactly once with page zoom", () => {
+  const clampSource = readerJs.match(/function clamp[\s\S]*?(?=\n\n  function parsePage)/)?.[0];
+  const roleSizesSource = readerJs.match(/const ROLE_TEXT_MAXIMUMS = Object\.freeze\(\{[\s\S]*?\}\);/)?.[0];
+  const lineHeightSource = readerJs.match(/function roleLineHeight[\s\S]*?(?=\n\n  function roleTextBaseSize)/)?.[0];
+  const baseSizeSource = readerJs.match(/function roleTextBaseSize[\s\S]*?(?=\n\n  function displayTextSize)/)?.[0];
+  const displaySizeSource = readerJs.match(/function displayTextSize[\s\S]*?(?=\n\n  function applyTextRegionPreferences)/)?.[0];
+  const applySource = readerJs.match(/function applyTextRegionPreferences[\s\S]*?(?=\n\n  function updateTextRegionOverflow)/)?.[0];
+  assert.ok(clampSource && roleSizesSource && lineHeightSource && baseSizeSource && displaySizeSource && applySource);
+
+  const state = { zoom: 2, textScale: 1.8, lineHeightScale: 1.6 };
+  const helpers = Function(
+    "state",
+    `${clampSource}\n${roleSizesSource}\n${lineHeightSource}\n${baseSizeSource}\n${displaySizeSource}\n${applySource}; return { displayTextSize, applyTextRegionPreferences };`
+  )(state);
+  const region = { textContent: "tiny OCR box", dataset: { role: "body" }, style: {}, clientWidth: 0, clientHeight: 0 };
+
+  helpers.applyTextRegionPreferences(region, 512, 1);
+  assert.equal(region.style.fontSize, "43.2px");
+  assert.ok(Math.abs(Number(region.style.lineHeight) - 1.872) < 1e-9);
+  state.zoom = 0.5;
+  helpers.applyTextRegionPreferences(region, 128, 1);
+  assert.equal(region.style.fontSize, "10.8px", "zero-height regions must receive the current scale");
+  assert.equal(helpers.displayTextSize("body", 512, 2, 1.5, 1) / helpers.displayTextSize("body", 128, 0.5, 1.5, 1), 4);
+  assert.doesNotMatch(applySource, /client(?:Width|Height)\s*</);
+});
+
+test("reader removes redundant page headers while retaining provenance and region names", () => {
+  assert.doesNotMatch(readerHtml, /class="panel-header"|id="scan-heading"|id="facsimile-heading"/);
+  assert.match(readerHtml, /<section class="page-panel scan-panel" aria-label="Original scan page">/);
+  assert.match(readerHtml, /<section class="page-panel facsimile-panel" aria-label="Modern reading facsimile page">/);
+  assert.match(readerHtml, /class="qa-provenance"[\s\S]*?id="page-confidence"[\s\S]*?id="source-link"/);
+  assert.doesNotMatch(readerJs, /panelHeaders|syncPanelHeaderHeights/);
+  assert.doesNotMatch(readerCss, /\.panel-header|\.panel-kicker|\.panel-source/);
+  assert.match(readerCss, /\.qa-provenance\s*\{/);
 });
 
 test("numeric display preferences are bounded and fail closed", () => {
@@ -153,6 +195,8 @@ test("reader uses one adjacent, layout-zoomed spread", () => {
   assert.match(readerJs, /--page-display-width/);
   assert.match(readerJs, /baseWidth \* state\.zoom/);
   assert.match(readerJs, /setProperty\("--page-display-width", `\$\{displayWidth\}px`\)/);
+  assert.match(readerJs, /setProperty\("--spread-max-height", `\$\{Math\.round\(availableHeight\)\}px`\)/);
+  assert.doesNotMatch(readerJs, /availableHeight \+ 54/);
   assert.match(readerJs, /elements\.zoom\.addEventListener\("input", \(\) => setZoom/);
   assert.match(readerJs, /state\.zoomAnchor = spreadPosition\(\)/);
   assert.match(readerJs, /updatePageSizing\(state\.pageRatio, true, state\.zoomAnchor\)/);
@@ -185,8 +229,8 @@ test("fullscreen keeps controls available and has a CSS fallback", () => {
   assert.match(readerJs, /updateSpreadAccessibility/);
   assert.match(readerJs, /Original scan page/);
   assert.match(readerJs, /Facsimile page/);
-  assert.match(readerHtml, /assets\/reader\.css\?v=3/);
-  assert.match(readerHtml, /assets\/reader\.js\?v=3/);
+  assert.match(readerHtml, /assets\/reader\.css\?v=4/);
+  assert.match(readerHtml, /assets\/reader\.js\?v=4/);
 });
 
 test("reader consumes the manifest contract without injecting source HTML", () => {
@@ -233,7 +277,7 @@ test("reader preserves responsive access, focus, and readable overflow", () => {
   assert.match(readerJs, /focusedPage[\s\S]*?focus\(\{ preventScroll: true \}\)/);
   assert.match(readerJs, /await loadPage\(state\.page\);/, "volume changes must announce their loaded page");
   assert.doesNotMatch(readerJs, /await loadPage\(state\.page, false\)/);
-  assert.match(readerJs, /const minimum = 12/);
+  assert.match(readerJs, /Math\.max\(12, roleMaximum/);
   assert.match(readerJs, /is-overflowing/);
   assert.match(readerJs, /aria-describedby", "overflow-help/);
   assert.match(readerJs, /Normalized modern English/);

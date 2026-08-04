@@ -7,8 +7,8 @@
   <meta name="description" content="A side-by-side reader for original herbal scans and their modern facsimile editions.">
   <title>Facsimile reader — World Herb Library</title>
   <link rel="stylesheet" href="assets/site.css">
-  <link rel="stylesheet" href="assets/reader.css?v=3">
-  <script src="assets/reader.js?v=3" defer></script>
+  <link rel="stylesheet" href="assets/reader.css?v=4">
+  <script src="assets/reader.js?v=4" defer></script>
 </head>
 <body class="reader-body" data-view="both">
   <a class="skip-link" href="#reader-stage">Skip to the page</a>
@@ -24,8 +24,12 @@
     </div>
     <details class="qa-popover">
       <summary class="qa-badge" id="qa-badge">QA status loading</summary>
-      <div class="qa-card" id="qa-help">
-        Quality information will appear when the book manifest has loaded.
+      <div class="qa-card">
+        <div id="qa-help">Quality information will appear when the book manifest has loaded.</div>
+        <div class="qa-provenance" aria-label="Current page provenance">
+          <span class="page-confidence" id="page-confidence">Confidence —</span>
+          <a class="source-record-link" id="source-link" href="#" target="_blank" rel="noopener" hidden>Source record <span aria-hidden="true">↗</span></a>
+        </div>
       </div>
     </details>
   </header>
@@ -123,14 +127,7 @@
 
     <div class="spread-scroll" id="spread-scroll" role="region" tabindex="0" aria-label="Original and facsimile page spread" aria-describedby="zoom-help">
     <div class="page-spread" id="page-spread" aria-busy="true">
-      <section class="page-panel scan-panel" aria-labelledby="scan-heading">
-        <header class="panel-header">
-          <div>
-            <span class="panel-kicker">Source</span>
-            <h2 id="scan-heading">Original scan</h2>
-          </div>
-          <a class="panel-source" id="source-link" href="#" target="_blank" rel="noopener" hidden>Source record <span aria-hidden="true">↗</span></a>
-        </header>
+      <section class="page-panel scan-panel" aria-label="Original scan page">
         <div class="page-viewport scan-viewport">
           <div class="page-loading" id="scan-loading" aria-hidden="true"></div>
           <img class="scan-page" id="scan-page" alt="" decoding="async">
@@ -138,14 +135,7 @@
         </div>
       </section>
 
-      <section class="page-panel facsimile-panel" aria-labelledby="facsimile-heading">
-        <header class="panel-header">
-          <div>
-            <span class="panel-kicker">Machine-assisted reading edition</span>
-            <h2 id="facsimile-heading">Modern reading facsimile</h2>
-          </div>
-          <span class="page-confidence" id="page-confidence">Confidence —</span>
-        </header>
+      <section class="page-panel facsimile-panel" aria-label="Modern reading facsimile page">
         <div class="page-viewport facsimile-viewport">
           <div class="facsimile-page is-loading" id="facsimile-page" role="document" aria-label="Facsimile page loading">
             <div class="facsimile-text" id="facsimile-text"></div>
