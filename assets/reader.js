@@ -2,7 +2,15 @@
   "use strict";
 
   const CATALOG_PATH = "data/catalog.json";
+  const PROJECT_CONFIG_PATH = "data/reader-config.json";
+  const REGION_SETTINGS_SCHEMA = "whl-region-settings/1";
   const FONT_CHOICES = ["edition", "georgia", "palatino", "sans"];
+  const FONT_STACKS = Object.freeze({
+    edition: "var(--facsimile-body-font, var(--serif))",
+    georgia: "Georgia, 'Times New Roman', serif",
+    palatino: "Palatino, 'Palatino Linotype', 'Book Antiqua', serif",
+    sans: "Arial, Helvetica, system-ui, sans-serif"
+  });
   const ROLE_TEXT_MAXIMUMS = Object.freeze({
     title: 42,
     heading: 30,
@@ -14,6 +22,7 @@
     "page-number": 15
   });
   const catalogUrl = new URL(CATALOG_PATH, window.location.href);
+  const projectConfigUrl = new URL(PROJECT_CONFIG_PATH, window.location.href);
   const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
 
   const elements = {
@@ -59,6 +68,44 @@
     displayReset: document.querySelector("#display-reset"),
     fullscreenToggle: document.querySelector("#fullscreen-toggle"),
     fullscreenLabel: document.querySelector("#fullscreen-label"),
+    editorToggle: document.querySelector("#editor-toggle"),
+    editorPanel: document.querySelector("#region-editor-panel"),
+    editorClose: document.querySelector("#editor-close"),
+    editorSelection: document.querySelector("#editor-selection"),
+    editorScope: document.querySelector("#editor-scope"),
+    editorFontFamily: document.querySelector("#editor-font-family"),
+    editorFontSize: document.querySelector("#editor-font-size"),
+    editorFontWeight: document.querySelector("#editor-font-weight"),
+    editorFontColor: document.querySelector("#editor-font-color"),
+    editorLineHeight: document.querySelector("#editor-line-height"),
+    editorLetterSpacing: document.querySelector("#editor-letter-spacing"),
+    editorFitMode: document.querySelector("#editor-fit-mode"),
+    editorWrap: document.querySelector("#editor-wrap"),
+    editorOverflow: document.querySelector("#editor-overflow"),
+    editorMaxWidth: document.querySelector("#editor-max-width"),
+    editorMinFont: document.querySelector("#editor-min-font"),
+    editorGeometry: document.querySelector("#editor-geometry"),
+    editorGeometryHelp: document.querySelector("#editor-geometry-help"),
+    editorGeometryX: document.querySelector("#editor-geometry-x"),
+    editorGeometryY: document.querySelector("#editor-geometry-y"),
+    editorGeometryWidth: document.querySelector("#editor-geometry-width"),
+    editorGeometryHeight: document.querySelector("#editor-geometry-height"),
+    editorGeometryXLabel: document.querySelector("#editor-geometry-x-label"),
+    editorGeometryYLabel: document.querySelector("#editor-geometry-y-label"),
+    editorGeometryWidthLabel: document.querySelector("#editor-geometry-width-label"),
+    editorGeometryHeightLabel: document.querySelector("#editor-geometry-height-label"),
+    editorResetGeometry: document.querySelector("#editor-reset-geometry"),
+    editorTextToggle: document.querySelector("#editor-text-toggle"),
+    editorRestoreText: document.querySelector("#editor-restore-text"),
+    editorUndo: document.querySelector("#editor-undo"),
+    editorRedo: document.querySelector("#editor-redo"),
+    editorResetScope: document.querySelector("#editor-reset-scope"),
+    editorExport: document.querySelector("#editor-export"),
+    editorImport: document.querySelector("#editor-import"),
+    editorStatus: document.querySelector("#editor-status"),
+    editorOverlay: document.querySelector("#editor-region-overlay"),
+    editorMoveHandle: document.querySelector("#editor-move-handle"),
+    editorResizeHandle: document.querySelector("#editor-resize-handle"),
     live: document.querySelector("#reader-live"),
     keyboardHint: document.querySelector("#keyboard-hint")
   };
@@ -97,7 +144,25 @@
     fitFrame: 0,
     sizeFrame: 0,
     pageRatio: 0.72,
-    pageDisplayWidth: 520
+    pageDisplayWidth: 520,
+    projectConfig: null,
+    editorEnabled: false,
+    editorActive: false,
+    regionSettings: null,
+    regionPersistence: null,
+    editorUnsubscribe: null,
+    selectedRegionId: null,
+    textEditing: false,
+    editorDrag: null,
+    editorSaveTimer: 0,
+    editorControlTimers: new WeakMap(),
+    editorComposing: false,
+    editorTextDirty: false,
+    editorTextStart: "",
+    editorTextHadOverride: false,
+    editorTextOriginalOverride: "",
+    editorTextAutosaved: false,
+    editorStatusRevision: 0
   };
 
   function readPreference(key, fallback, allowed) {
@@ -149,6 +214,22 @@
 
   function clamp(value, minimum, maximum) {
     return Math.min(maximum, Math.max(minimum, value));
+  }
+
+  function isRegionEditorEnabled(config) {
+    return config?.schema === "whl-reader-config/1"
+      && config?.projectId === "living-herbal"
+      && config?.features?.regionEditor === true;
+  }
+
+  function reservesArrowKeys(target) {
+    if (!target) return false;
+    const tagName = String(target.tagName || target.nodeName || "").toLowerCase();
+    if (["input", "select", "textarea"].includes(tagName) || target.isContentEditable) return true;
+    if (target === elements.spreadScroll) return true;
+    return Boolean(target.closest?.(
+      "#spread-scroll, .text-region.is-overflowing, .text-region.is-editor-selected, #region-editor-panel, .editor-region-handle"
+    ));
   }
 
   function parsePage(value, fallback = 1) {
@@ -304,6 +385,154 @@
     });
     if (!response.ok) throw new Error(`Request for ${url} returned ${response.status}`);
     return response.json();
+  }
+
+  function emptyRegionSettings(projectId = "living-herbal") {
+    return {
+      schema: REGION_SETTINGS_SCHEMA,
+      schemaVersion: 1,
+      projectId,
+      overrides: {}
+    };
+  }
+
+  function safeProjectAssetUrl(value, fallback) {
+    const candidate = typeof value === "string" && value.trim() ? value.trim() : fallback;
+    try {
+      const url = new URL(candidate, window.location.href);
+      return url.origin === window.location.origin ? url : new URL(fallback, window.location.href);
+    } catch {
+      return new URL(fallback, window.location.href);
+    }
+  }
+
+  function regionSettingsContext(regionId, role, layer = state.layer) {
+    return {
+      bookId: state.book?.id || "",
+      page: state.page,
+      role: safeRole(role),
+      regionId: String(regionId || ""),
+      layer
+    };
+  }
+
+  function resolveRegionSettings(context) {
+    if (!state.regionSettings || !context.bookId) return { style: {}, geometry: {}, fit: {}, text: {} };
+    try {
+      return state.regionSettings.resolve(context) || { style: {}, geometry: {}, fit: {}, text: {} };
+    } catch (error) {
+      console.warn("A region settings override could not be resolved", error);
+      return { style: {}, geometry: {}, fit: {}, text: {} };
+    }
+  }
+
+  function exposeRegionSettingsApi() {
+    if (!state.regionSettings) return;
+    const engine = state.regionSettings;
+    window.WHLReaderRegions = Object.freeze({
+      schema: REGION_SETTINGS_SCHEMA,
+      ready: engine.ready,
+      resolve: (context) => engine.resolve(context),
+      getScope: (target, options) => engine.getScope(target, options),
+      snapshot: () => engine.snapshot(),
+      export: (options) => engine.export(options),
+      subscribe: (listener) => engine.subscribe(listener)
+    });
+    if (!state.editorEnabled) {
+      try { delete window.WHLReaderEditor; } catch { /* A stale non-configurable host value is harmless. */ }
+      return;
+    }
+    window.WHLReaderEditor = Object.freeze({
+      schema: REGION_SETTINGS_SCHEMA,
+      enabled: true,
+      ready: engine.ready,
+      set: (target, patch) => engine.set(target, patch),
+      remove: (target, path) => engine.remove(target, path),
+      setText: (target, layer, value) => engine.setText(target, layer, value),
+      clearText: (target, layer) => engine.clearText(target, layer),
+      setBox: (target, box) => engine.set({
+        scope: "region",
+        bookId: target?.bookId,
+        page: target?.page,
+        regionId: target?.regionId
+      }, { geometry: { box } }),
+      import: (documentValue, options) => engine.import(documentValue, options),
+      export: (options) => engine.export(options),
+      snapshot: () => engine.snapshot(),
+      resolve: (context) => engine.resolve(context),
+      getScope: (target, options) => engine.getScope(target, options),
+      undo: () => engine.undo(),
+      redo: () => engine.redo(),
+      batch: (callbackOrCommands, label) => engine.batch(callbackOrCommands, label),
+      flush: () => engine.flush(),
+      subscribe: (listener) => engine.subscribe(listener),
+      selectRegion: (regionId) => selectEditorRegion(regionId)
+    });
+  }
+
+  async function initializeRegionSettings() {
+    let config = null;
+    try {
+      config = await fetchJson(projectConfigUrl, undefined, "no-cache");
+    } catch (error) {
+      console.warn("Reader project configuration is unavailable; editor mode remains disabled", error);
+    }
+    state.projectConfig = config;
+    state.editorEnabled = isRegionEditorEnabled(config);
+
+    const identityValid = config?.schema === "whl-reader-config/1"
+      && config?.projectId === "living-herbal";
+    const projectId = "living-herbal";
+    const publishedUrl = safeProjectAssetUrl(identityValid ? config?.publishedSettings : null, "data/region-settings.json");
+    let published = emptyRegionSettings(projectId);
+    try {
+      published = await fetchJson(publishedUrl, undefined, "no-cache");
+    } catch (error) {
+      console.warn("Published region settings are unavailable; source layout will be used", error);
+    }
+
+    const library = window.WHLRegionSettings;
+    if (!library?.createEngine) {
+      console.warn("The region settings engine did not load; source layout will be used");
+      state.editorEnabled = false;
+      return;
+    }
+
+    let persistence = null;
+    if (state.editorEnabled) {
+      const configuredKey = typeof config?.draftStorageKey === "string" ? config.draftStorageKey : "";
+      const storageName = /^[a-zA-Z0-9:_-]{1,80}$/.test(configuredKey)
+        ? configuredKey
+        : "whl-region-settings-v1";
+      const keyPrefix = `${storageName}:`;
+      try {
+        persistence = library.createBrowserPersistence?.({ keyPrefix, dbName: storageName }) || null;
+      } catch (error) {
+        console.warn("Persistent editor storage is unavailable; this editing session is memory-only", error);
+      }
+    }
+
+    try {
+      state.regionPersistence = persistence;
+      state.regionSettings = library.createEngine({
+        base: published,
+        projectId,
+        editorEnabled: state.editorEnabled,
+        persistence
+      });
+      await state.regionSettings.ready;
+      state.editorUnsubscribe = state.regionSettings.subscribe(() => {
+        if (state.currentPageData) applyAllRegionSettings();
+        if (state.editorActive) syncEditorPanel();
+      });
+      exposeRegionSettingsApi();
+      if (state.editorEnabled) mountRegionEditor();
+    } catch (error) {
+      console.warn("Region settings could not be initialized; the reader remains available", error);
+      state.regionSettings = null;
+      state.regionPersistence = null;
+      state.editorEnabled = false;
+    }
   }
 
   function setMessage(text, mode = "loading", delayed = false) {
@@ -492,6 +721,8 @@
     const book = state.catalog?.books?.find((candidate) => candidate.id === bookId) ?? state.catalog?.books?.[0];
     if (!book) throw new Error("The catalogue contains no readable volumes.");
 
+    if (state.editorActive) clearEditorSelection();
+
     state.pageController?.abort();
     state.manifestController?.abort();
     cancelPrefetch();
@@ -559,6 +790,7 @@
     elements.scanLoading.hidden = false;
     elements.facsimilePage.hidden = false;
     elements.facsimilePage.classList.add("is-loading");
+    elements.editorOverlay.hidden = true;
     elements.facsimileText.replaceChildren();
     elements.facsimilePage.querySelector(".facsimile-art")?.remove();
     elements.pageConfidence.textContent = "Confidence —";
@@ -708,23 +940,75 @@
       .trim();
   }
 
+  function normalizePlainText(value) {
+    return String(value ?? "").replace(/\r\n?/g, "\n");
+  }
+
+  function editablePlainText(node) {
+    return normalizePlainText(typeof node?.innerText === "string" ? node.innerText : node?.textContent);
+  }
+
+  function hasOwn(object, key) {
+    return Boolean(object && Object.prototype.hasOwnProperty.call(object, key));
+  }
+
+  function textOverrideForLayer(settings, layer) {
+    if (settings?.hasTextOverride === true) return { present: true, value: settings.text };
+    if (hasOwn(settings?.text, layer)) return { present: true, value: settings.text[layer] };
+    if (hasOwn(settings, "textValue")) return { present: true, value: settings.textValue };
+    return { present: false, value: "" };
+  }
+
+  function transformedRegionBox(baseBox, geometry = {}) {
+    const explicitBox = Array.isArray(geometry.box) && geometry.box.length === 4
+      ? normalizedBox(geometry.box, 1, 1)
+      : null;
+    if (explicitBox) return explicitBox;
+    const source = explicitBox || baseBox;
+    let width = source[2] - source[0];
+    let height = source[3] - source[1];
+    const centerX = ((source[0] + source[2]) / 2) + clamp(Number(geometry.translateX) || 0, -1, 1);
+    const centerY = ((source[1] + source[3]) / 2) + clamp(Number(geometry.translateY) || 0, -1, 1);
+    width *= clamp(Number(geometry.scaleX) || 1, 0.25, 4);
+    height *= clamp(Number(geometry.scaleY) || 1, 0.25, 4);
+    width = clamp(width, 0.005, 1);
+    height = clamp(height, 0.005, 1);
+    const x0 = clamp(centerX - (width / 2), 0, 1 - width);
+    const y0 = clamp(centerY - (height / 2), 0, 1 - height);
+    return [x0, y0, x0 + width, y0 + height];
+  }
+
+  function setRegionBox(node, box) {
+    const [x0, y0, x1, y1] = box;
+    node.style.left = `${x0 * 100}%`;
+    node.style.top = `${y0 * 100}%`;
+    node.style.width = `${(x1 - x0) * 100}%`;
+    node.style.height = `${(y1 - y0) * 100}%`;
+    node.__whlDisplayBox = [...box];
+  }
+
   function makeTextRegion(region, dimensions, index) {
     const box = normalizedBox(region.box, dimensions.width, dimensions.height);
     if (!box) return null;
-    const [x0, y0, x1, y1] = box;
     const role = safeRole(region.role);
-    const chosen = selectedText(region);
+    const regionId = String(region.id ?? index + 1);
+    const context = regionSettingsContext(regionId, role);
+    const settings = resolveRegionSettings(context);
+    const sourceText = selectedText(region);
+    const override = textOverrideForLayer(settings, state.layer);
+    const chosen = override.present ? { value: override.value, fallback: false } : sourceText;
     const confidence = normalizeConfidence(region.confidence);
     const node = document.createElement("div");
     node.className = `text-region${chosen.fallback ? " is-fallback" : ""}`;
     node.dataset.role = role;
     node.dataset.label = `${role.replaceAll("-", " ")}${confidence === null ? "" : ` · ${Math.round(confidence * 100)}%`}`;
-    node.dataset.regionId = String(region.id ?? index + 1);
-    node.style.left = `${x0 * 100}%`;
-    node.style.top = `${y0 * 100}%`;
-    node.style.width = `${(x1 - x0) * 100}%`;
-    node.style.height = `${(y1 - y0) * 100}%`;
-    node.textContent = sanitizeDisplayText(chosen.value);
+    node.dataset.regionId = regionId;
+    node.__whlBaseBox = [...box];
+    node.__whlSourceRegion = region;
+    node.__whlSettings = settings;
+    node.__whlGeometryBox = transformedRegionBox(box, settings.geometry);
+    setRegionBox(node, node.__whlGeometryBox);
+    node.textContent = override.present ? normalizePlainText(chosen.value) : sanitizeDisplayText(chosen.value);
     const language = textLanguage(state.book?.language, state.layer);
     if (language) node.lang = language;
     if (!node.textContent && !["illustration", "image"].includes(role)) node.setAttribute("aria-hidden", "true");
@@ -775,6 +1059,11 @@
 
     const nodes = regions.map((region, index) => makeTextRegion(region || {}, dimensions, index)).filter(Boolean);
     elements.facsimileText.replaceChildren(...nodes);
+    if (state.editorActive) {
+      const selected = nodes.find((node) => node.dataset.regionId === state.selectedRegionId);
+      const firstReadable = preferredEditorRegion(nodes);
+      if (selected || firstReadable) selectEditorRegion((selected || firstReadable).dataset.regionId, { focus: false });
+    }
     updatePageConfidence(data.confidence, regions);
     scheduleTextFit();
   }
@@ -900,26 +1189,886 @@
     return Math.max(4, roleTextBaseSize(role, logicalPageWidth, manifestScale) * safeZoom * clamp(Number(textScale) || 1, 0.75, 2));
   }
 
+  function effectiveRegionFont(style, role) {
+    const token = state.fontChoice !== "edition" ? state.fontChoice : style?.fontFamily;
+    if (token && token !== "edition" && FONT_STACKS[token]) return FONT_STACKS[token];
+    if (token === "edition") {
+      return ["title", "heading", "header"].includes(role)
+        ? "var(--facsimile-heading-font, var(--facsimile-body-font, var(--serif)))"
+        : FONT_STACKS.edition;
+    }
+    return "";
+  }
+
   function applyTextRegionPreferences(region, pageWidth, manifestScale = 1) {
     if (!region.textContent) return;
-    const requestedSize = displayTextSize(region.dataset.role, pageWidth, state.zoom, state.textScale, manifestScale);
+    const settings = region.__whlSettings || {};
+    const style = settings.style || {};
+    const authoredScale = clamp(Number(style.fontSize) || 1, 0.5, 4);
+    const requestedSize = displayTextSize(region.dataset.role, pageWidth, state.zoom, state.textScale, manifestScale) * authoredScale;
     region.style.fontSize = `${Math.floor(requestedSize * 10) / 10}px`;
-    region.style.lineHeight = String(roleLineHeight(region.dataset.role) * state.lineHeightScale);
+    const lineHeight = Number.isFinite(Number(style.lineHeight)) ? Number(style.lineHeight) : roleLineHeight(region.dataset.role);
+    region.style.lineHeight = String(lineHeight * state.lineHeightScale);
+    const fontFamily = effectiveRegionFont(style, region.dataset.role);
+    if (fontFamily) region.style.fontFamily = fontFamily;
+    else region.style.removeProperty("font-family");
+    if (Number.isFinite(Number(style.fontWeight))) region.style.fontWeight = String(style.fontWeight);
+    else region.style.removeProperty("font-weight");
+    if (typeof style.color === "string") region.style.color = style.color;
+    else region.style.removeProperty("color");
+    if (Number.isFinite(Number(style.letterSpacing))) region.style.letterSpacing = `${style.letterSpacing}em`;
+    else region.style.removeProperty("letter-spacing");
+    const nowrap = settings.fit?.wrap === "nowrap";
+    region.style.whiteSpace = nowrap ? "pre" : "pre-wrap";
+    region.style.overflowWrap = nowrap ? "normal" : "break-word";
+    region.style.hyphens = nowrap ? "none" : "auto";
+    if (settings.fit?.wrap === "balance") region.style.textWrap = "balance";
+    else if (nowrap) region.style.textWrap = "nowrap";
+    else if (settings.fit?.wrap === "normal") region.style.textWrap = "wrap";
+    else region.style.removeProperty("text-wrap");
   }
 
   function updateTextRegionOverflow(region) {
+    const fit = region.__whlSettings?.fit || {};
+    if (region.__whlGeometryBox) setRegionBox(region, region.__whlGeometryBox);
     const measurable = Boolean(region.textContent) && region.clientWidth >= 1 && region.clientHeight >= 1;
-    const overflows = measurable && (region.scrollHeight > region.clientHeight + 1 || region.scrollWidth > region.clientWidth + 1);
+    const isOverflowing = () => measurable
+      && (region.scrollHeight > region.clientHeight + 1 || region.scrollWidth > region.clientWidth + 1);
+    if (["grow-width", "grow-then-shrink"].includes(fit.mode) && isOverflowing() && region.__whlGeometryBox) {
+      const [sourceX0, sourceY0, sourceX1, sourceY1] = region.__whlGeometryBox;
+      const sourceWidth = sourceX1 - sourceX0;
+      const centerX = (sourceX0 + sourceX1) / 2;
+      const widen = (scale) => {
+        const width = clamp(sourceWidth * scale, sourceWidth, 1);
+        const x0 = clamp(centerX - (width / 2), 0, 1 - width);
+        setRegionBox(region, [x0, sourceY0, x0 + width, sourceY1]);
+      };
+      const maximum = clamp(Number(fit.maxWidthScale) || 1.5, 1, 4);
+      widen(maximum);
+      if (!isOverflowing() && maximum > 1) {
+        let low = 1;
+        let high = maximum;
+        let best = maximum;
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          const candidate = (low + high) / 2;
+          widen(candidate);
+          if (isOverflowing()) low = candidate;
+          else {
+            best = candidate;
+            high = candidate;
+          }
+        }
+        widen(best);
+      }
+    }
+    if (["shrink-text", "grow-then-shrink"].includes(fit.mode) && isOverflowing()) {
+      const baseSize = Number.parseFloat(region.style.fontSize);
+      const minimumScale = clamp(Number(fit.minFontScale) || 0.7, 0.5, 1);
+      let low = minimumScale;
+      let high = 1;
+      let best = minimumScale;
+      region.style.fontSize = `${Math.max(4, baseSize * minimumScale)}px`;
+      if (!isOverflowing()) {
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          const candidate = (low + high) / 2;
+          region.style.fontSize = `${Math.max(4, baseSize * candidate)}px`;
+          if (isOverflowing()) high = candidate;
+          else {
+            best = candidate;
+            low = candidate;
+          }
+        }
+        region.style.fontSize = `${Math.floor(Math.max(4, baseSize * best) * 10) / 10}px`;
+      }
+    }
+    const overflows = isOverflowing();
     region.classList.toggle("is-overflowing", overflows);
-    if (!overflows) {
+    const overflowPolicy = fit.overflow || "auto";
+    if (overflowPolicy === "visible") {
+      region.style.overflow = "visible";
+      region.classList.remove("is-overflowing");
+    } else if (overflowPolicy === "hidden") {
+      region.style.overflow = "hidden";
+      region.classList.remove("is-overflowing");
+    } else if (overflowPolicy === "scroll") {
+      region.style.overflow = "scroll";
+    } else {
+      region.style.removeProperty("overflow");
+    }
+    const scrollable = overflows && ["auto", "scroll"].includes(overflowPolicy);
+    if (!scrollable) {
       region.removeAttribute("tabindex");
       region.removeAttribute("aria-describedby");
       region.removeAttribute("title");
+      if (state.editorActive) region.tabIndex = region.dataset.regionId === state.selectedRegionId ? 0 : -1;
     } else {
-      region.tabIndex = 0;
+      region.tabIndex = state.editorActive && region.dataset.regionId !== state.selectedRegionId ? -1 : 0;
       region.setAttribute("aria-describedby", "overflow-help");
       region.title = "Scroll within this region to read the complete text.";
     }
+    if (state.editorActive && region.dataset.regionId === state.selectedRegionId) syncEditorOverlay();
+  }
+
+  function applyResolvedRegionSettings(region) {
+    if (!region?.__whlBaseBox) return;
+    const context = regionSettingsContext(region.dataset.regionId, region.dataset.role);
+    const settings = resolveRegionSettings(context);
+    region.__whlSettings = settings;
+    region.__whlGeometryBox = transformedRegionBox(region.__whlBaseBox, settings.geometry);
+    setRegionBox(region, region.__whlGeometryBox);
+    if (!(state.textEditing && region.dataset.regionId === state.selectedRegionId)) {
+      const source = selectedText(region.__whlSourceRegion || {});
+      const override = textOverrideForLayer(settings, state.layer);
+      const chosen = override.present ? { value: override.value, fallback: false } : source;
+      region.textContent = override.present ? normalizePlainText(chosen.value) : sanitizeDisplayText(chosen.value);
+      region.classList.toggle("is-fallback", chosen.fallback);
+      if (region.textContent || ["illustration", "image"].includes(region.dataset.role)) region.removeAttribute("aria-hidden");
+      else region.setAttribute("aria-hidden", "true");
+    }
+    applyTextRegionPreferences(region, state.pageDisplayWidth, clamp(Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--facsimile-body-scale")) || 1, 0.75, 1.35));
+  }
+
+  function applyAllRegionSettings() {
+    const regions = [...elements.facsimileText.querySelectorAll(".text-region")];
+    regions.forEach(applyResolvedRegionSettings);
+    scheduleTextFit();
+    syncEditorOverlay();
+  }
+
+  function selectedRegionNode() {
+    if (!state.selectedRegionId) return null;
+    return [...elements.facsimileText.querySelectorAll(".text-region")]
+      .find((region) => region.dataset.regionId === state.selectedRegionId) || null;
+  }
+
+  function preferredEditorRegion(regions) {
+    const peripheralRoles = new Set(["page-number", "footer", "catch-word", "signature-mark"]);
+    return regions.find((region) => region.textContent.trim() && !region.classList.contains("is-overflowing") && !peripheralRoles.has(region.dataset.role))
+      || regions.find((region) => region.textContent.trim() && !peripheralRoles.has(region.dataset.role))
+      || regions.find((region) => region.textContent.trim() && !region.classList.contains("is-overflowing"))
+      || regions.find((region) => region.textContent.trim())
+      || regions[0];
+  }
+
+  function editorTarget(scope = elements.editorScope?.value || "region") {
+    const node = selectedRegionNode();
+    if (!state.book?.id || !node) return null;
+    const target = { scope, bookId: state.book.id };
+    if (["page", "pageRegionType", "region"].includes(scope)) target.page = state.page;
+    if (["regionType", "pageRegionType"].includes(scope)) target.role = node.dataset.role;
+    if (scope === "region") target.regionId = node.dataset.regionId;
+    return target;
+  }
+
+  function exactRegionTarget() {
+    return editorTarget("region");
+  }
+
+  function valueAtPath(object, path) {
+    return String(path).split(".").reduce((value, key) => value?.[key], object);
+  }
+
+  function setEditorStatus(message, error = false) {
+    if (!elements.editorStatus) return;
+    elements.editorStatus.textContent = message;
+    elements.editorStatus.classList.toggle("is-error", error);
+  }
+
+  function syncEditorHistory() {
+    if (!state.regionSettings) return;
+    const snapshot = state.regionSettings.snapshot();
+    elements.editorUndo.disabled = !snapshot.canUndo;
+    elements.editorRedo.disabled = !snapshot.canRedo;
+  }
+
+  function recordEditorChange(message) {
+    const revision = state.regionSettings.snapshot().revision;
+    state.editorStatusRevision = revision;
+    syncEditorHistory();
+    if (!state.regionPersistence) {
+      setEditorStatus(`${message} Kept for this session; export JSON before closing.`, true);
+      return;
+    }
+    setEditorStatus(`${message} Saving locally…`);
+    state.regionSettings.flush().then(() => {
+      const snapshot = state.regionSettings.snapshot();
+      if (snapshot.revision !== revision || state.editorStatusRevision !== revision) return;
+      if (snapshot.persistenceError) {
+        setEditorStatus(`${message} Local storage failed; export JSON to keep this work.`, true);
+      } else {
+        setEditorStatus(`${message} Saved in this browser.`);
+      }
+    });
+  }
+
+  function setEditorPatch(target, patch, message = "Setting updated.") {
+    if (!state.editorEnabled || !state.regionSettings || !target) return false;
+    try {
+      const changed = state.regionSettings.set(target, patch);
+      if (changed) recordEditorChange(message);
+      else setEditorStatus("No setting changed.");
+      syncEditorHistory();
+      return changed;
+    } catch (error) {
+      console.error("Unable to update region settings", error);
+      setEditorStatus(error?.message || "This setting could not be saved.", true);
+      return false;
+    }
+  }
+
+  function removeEditorSetting(target, path, message = "Inherited setting restored.") {
+    if (!state.editorEnabled || !state.regionSettings || !target) return false;
+    try {
+      const changed = state.regionSettings.remove(target, path);
+      if (changed) recordEditorChange(message);
+      else setEditorStatus("This scope is already inherited.");
+      syncEditorHistory();
+      return changed;
+    } catch (error) {
+      console.error("Unable to remove region setting", error);
+      setEditorStatus(error?.message || "This setting could not be removed.", true);
+      return false;
+    }
+  }
+
+  function editorPatchForPath(path, value) {
+    const [group, property] = String(path).split(".");
+    return { [group]: { [property]: value } };
+  }
+
+  function editorControlValue(control, rawValue = control.value) {
+    if (control.type === "color") return rawValue;
+    if (control.tagName === "SELECT" && control.id !== "editor-font-weight") return rawValue;
+    const numeric = Number(rawValue);
+    const factor = Number(control.dataset.editorFactor) || 1;
+    return numeric * factor;
+  }
+
+  function syncGeometryEditor(node, scopePatch, resolved = node.__whlSettings || {}) {
+    const isRegion = elements.editorScope.value === "region";
+    const labels = isRegion
+      ? ["Left (%)", "Top (%)", "Width (%)", "Height (%)"]
+      : ["Move X (%)", "Move Y (%)", "Width scale (%)", "Height scale (%)"];
+    [elements.editorGeometryXLabel, elements.editorGeometryYLabel, elements.editorGeometryWidthLabel, elements.editorGeometryHeightLabel]
+      .forEach((label, index) => { label.textContent = labels[index]; });
+    elements.editorGeometryHelp.textContent = isRegion
+      ? "Exact position and size for this region, as percentages of the page. Drag the handles on the page for direct adjustment."
+      : "A reusable transform for every region matched by this scope. Values remain independent of reader zoom.";
+    if (isRegion) {
+      const box = node.__whlDisplayBox || node.__whlBaseBox;
+      elements.editorGeometryX.value = (box[0] * 100).toFixed(1);
+      elements.editorGeometryY.value = (box[1] * 100).toFixed(1);
+      elements.editorGeometryWidth.value = ((box[2] - box[0]) * 100).toFixed(1);
+      elements.editorGeometryHeight.value = ((box[3] - box[1]) * 100).toFixed(1);
+      elements.editorGeometryX.min = "0";
+      elements.editorGeometryY.min = "0";
+      elements.editorGeometryWidth.min = "0.5";
+      elements.editorGeometryHeight.min = "0.5";
+      elements.editorGeometryWidth.max = "100";
+      elements.editorGeometryHeight.max = "100";
+      [elements.editorGeometryX, elements.editorGeometryY, elements.editorGeometryWidth, elements.editorGeometryHeight]
+        .forEach((control) => { control.placeholder = ""; });
+    } else {
+      const geometry = scopePatch?.geometry || {};
+      const effective = resolved.geometry || {};
+      const fields = [
+        [elements.editorGeometryX, "translateX", 0],
+        [elements.editorGeometryY, "translateY", 0],
+        [elements.editorGeometryWidth, "scaleX", 1],
+        [elements.editorGeometryHeight, "scaleY", 1]
+      ];
+      fields.forEach(([control, property, fallback]) => {
+        control.value = hasOwn(geometry, property) ? (Number(geometry[property]) * 100).toFixed(1) : "";
+        control.placeholder = `${((Number(effective[property]) || fallback) * 100).toFixed(1)} inherited`;
+      });
+      elements.editorGeometryX.min = "-100";
+      elements.editorGeometryY.min = "-100";
+      elements.editorGeometryWidth.min = "25";
+      elements.editorGeometryHeight.min = "25";
+      elements.editorGeometryWidth.max = "400";
+      elements.editorGeometryHeight.max = "400";
+    }
+  }
+
+  function syncEditorPanel() {
+    if (!state.editorEnabled || !elements.editorPanel) return;
+    const node = selectedRegionNode();
+    const controls = [...elements.editorPanel.querySelectorAll("input, select, button")]
+      .filter((control) => ![elements.editorClose, elements.editorImport].includes(control));
+    if (!node) {
+      elements.editorSelection.textContent = "Choose a text region on the facsimile page.";
+      const globalControls = new Set([
+        elements.editorClose,
+        elements.editorImport,
+        elements.editorExport,
+        elements.editorUndo,
+        elements.editorRedo
+      ]);
+      controls.forEach((control) => { control.disabled = !globalControls.has(control); });
+      globalControls.forEach((control) => { control.disabled = false; });
+      syncEditorHistory();
+      elements.editorImport.closest("label")?.classList.remove("is-disabled");
+      return;
+    }
+
+    controls.forEach((control) => { control.disabled = false; });
+    syncEditorHistory();
+    elements.editorSelection.textContent = `Page ${state.page} · ${node.dataset.role.replaceAll("-", " ")} · ${node.dataset.regionId}`;
+    const target = editorTarget();
+    const context = regionSettingsContext(node.dataset.regionId, node.dataset.role);
+    const resolved = resolveRegionSettings(context);
+    let scopePatch = {};
+    let localPatch = {};
+    try {
+      scopePatch = state.regionSettings.getScope(target, { source: "overlay" }) || {};
+      localPatch = state.regionSettings.getScope(target, { source: "local" }) || {};
+    } catch {
+      // Invalid/stale scope data is already excluded by the engine.
+    }
+
+    elements.editorFontFamily.value = resolved.style?.fontFamily || "edition";
+    elements.editorFontSize.value = String(Math.round((Number(resolved.style?.fontSize) || 1) * 100));
+    elements.editorFontWeight.value = String(Number(resolved.style?.fontWeight) || (["title", "heading", "header"].includes(node.dataset.role) ? 600 : 400));
+    const inkChannels = colorChannels(resolved.style?.color || getComputedStyle(elements.facsimilePage).getPropertyValue("--page-ink"));
+    elements.editorFontColor.value = inkChannels ? channelsToHex(inkChannels) : "#29261e";
+    elements.editorLineHeight.value = String(Number(resolved.style?.lineHeight) || roleLineHeight(node.dataset.role));
+    elements.editorLetterSpacing.value = String(Number(resolved.style?.letterSpacing) || 0);
+    elements.editorFitMode.value = resolved.fit?.mode || "scroll";
+    elements.editorWrap.value = resolved.fit?.wrap || "normal";
+    elements.editorOverflow.value = resolved.fit?.overflow || "auto";
+    elements.editorMaxWidth.value = String(Math.round((Number(resolved.fit?.maxWidthScale) || 1.5) * 100));
+    elements.editorMinFont.value = String(Math.round((Number(resolved.fit?.minFontScale) || 0.7) * 100));
+    syncGeometryEditor(node, scopePatch, resolved);
+
+    elements.editorPanel.querySelectorAll("[data-editor-clear]").forEach((button) => {
+      button.disabled = valueAtPath(localPatch, button.dataset.editorClear) === undefined;
+    });
+    elements.editorTextToggle.checked = state.textEditing;
+    elements.editorRestoreText.disabled = !resolved.hasTextOverride;
+  }
+
+  function syncEditorOverlay() {
+    if (!elements.editorOverlay || !state.editorActive) {
+      if (elements.editorOverlay) elements.editorOverlay.hidden = true;
+      return;
+    }
+    const node = selectedRegionNode();
+    if (!node?.__whlDisplayBox) {
+      elements.editorOverlay.hidden = true;
+      return;
+    }
+    const [x0, y0, x1, y1] = node.__whlDisplayBox;
+    elements.editorOverlay.hidden = false;
+    elements.editorOverlay.style.left = `${x0 * 100}%`;
+    elements.editorOverlay.style.top = `${y0 * 100}%`;
+    elements.editorOverlay.style.width = `${(x1 - x0) * 100}%`;
+    elements.editorOverlay.style.height = `${(y1 - y0) * 100}%`;
+  }
+
+  function configureEditorRegionAccessibility(region, selected = false) {
+    if (!state.editorActive) {
+      region.removeAttribute("role");
+      region.removeAttribute("aria-current");
+      region.removeAttribute("aria-label");
+      if (!region.textContent && !["illustration", "image"].includes(region.dataset.role)) {
+        region.setAttribute("aria-hidden", "true");
+      }
+      updateTextRegionOverflow(region);
+      return;
+    }
+    region.removeAttribute("aria-hidden");
+    if (!region.isContentEditable) region.setAttribute("role", "button");
+    region.setAttribute(
+      "aria-label",
+      `${region.dataset.role.replaceAll("-", " ")} region ${region.dataset.regionId}${selected ? ", selected" : ""}${region.textContent.trim() ? `: ${region.textContent.replace(/\s+/g, " ").trim().slice(0, 100)}` : ""}`
+    );
+    if (selected) region.setAttribute("aria-current", "true");
+    else region.removeAttribute("aria-current");
+    region.tabIndex = selected ? 0 : -1;
+  }
+
+  function selectEditorRegion(regionId, options = {}) {
+    if (!state.editorEnabled) return false;
+    const id = String(regionId || "");
+    const node = [...elements.facsimileText.querySelectorAll(".text-region")]
+      .find((candidate) => candidate.dataset.regionId === id);
+    if (!node) return false;
+    if (!state.editorActive) setEditorActive(true);
+    if (state.textEditing && state.selectedRegionId !== id) finishTextEditing(true);
+    state.selectedRegionId = id;
+    elements.facsimileText.querySelectorAll(".text-region").forEach((region) => {
+      region.classList.toggle("is-editor-selected", region === node);
+      configureEditorRegionAccessibility(region, region === node);
+    });
+    syncEditorPanel();
+    syncEditorOverlay();
+    announce(`${node.dataset.role.replaceAll("-", " ")} region ${node.dataset.regionId} selected`);
+    if (options.focus !== false) {
+      node.focus({ preventScroll: true });
+      if (window.matchMedia?.("(max-width: 850px)")?.matches) {
+        node.scrollIntoView({ block: "center", inline: "nearest", behavior: reducedMotion ? "auto" : "smooth" });
+      }
+    }
+    return true;
+  }
+
+  function clearEditorSelection() {
+    if (state.textEditing) finishTextEditing(true);
+    state.selectedRegionId = null;
+    elements.facsimileText.querySelectorAll(".text-region").forEach((region) => {
+      region.classList.remove("is-editor-selected", "is-text-editing");
+      configureEditorRegionAccessibility(region, false);
+    });
+    elements.editorOverlay.hidden = true;
+    syncEditorPanel();
+  }
+
+  function setEditorActive(active) {
+    if (!state.editorEnabled) return;
+    state.editorActive = Boolean(active);
+    document.body.classList.toggle("is-editor-active", state.editorActive);
+    elements.editorToggle.setAttribute("aria-pressed", String(state.editorActive));
+    elements.editorToggle.setAttribute("aria-expanded", String(state.editorActive));
+    elements.editorPanel.hidden = !state.editorActive;
+    if (state.editorActive) {
+      elements.readingSettings.open = false;
+      const regions = [...elements.facsimileText.querySelectorAll(".text-region")];
+      const current = selectedRegionNode();
+      const firstReadable = preferredEditorRegion(regions);
+      if (current || firstReadable) selectEditorRegion((current || firstReadable).dataset.regionId);
+      else {
+        syncEditorPanel();
+        syncEditorOverlay();
+        setEditorStatus("This page has no selectable regions.");
+      }
+    } else {
+      finishTextEditing(true);
+      elements.editorOverlay.hidden = true;
+      elements.facsimileText.querySelectorAll(".text-region").forEach((region) => {
+        region.classList.remove("is-editor-selected");
+        configureEditorRegionAccessibility(region, false);
+      });
+      elements.editorToggle.focus({ preventScroll: true });
+    }
+    updatePageSizing();
+  }
+
+  function persistEditedText(message = "Text correction updated.") {
+    const node = selectedRegionNode();
+    window.clearTimeout(state.editorSaveTimer);
+    if (!state.textEditing || !node || !state.editorTextDirty) return false;
+    try {
+      const changed = state.regionSettings.setText(exactRegionTarget(), state.layer, editablePlainText(node));
+      state.editorTextDirty = false;
+      state.editorTextAutosaved ||= changed;
+      if (changed) recordEditorChange(message);
+      return changed;
+    } catch (error) {
+      setEditorStatus(error?.message || "The text correction could not be saved.", true);
+      return false;
+    }
+  }
+
+  function queueEditedTextSave() {
+    window.clearTimeout(state.editorSaveTimer);
+    state.editorSaveTimer = window.setTimeout(() => persistEditedText(), 400);
+  }
+
+  function finishTextEditing(commit = true) {
+    const node = selectedRegionNode();
+    if (!state.textEditing || !node) return;
+    window.clearTimeout(state.editorSaveTimer);
+    if (commit) {
+      persistEditedText();
+    } else {
+      try {
+        if (state.editorTextAutosaved) {
+          const changed = state.editorTextHadOverride
+            ? state.regionSettings.setText(exactRegionTarget(), state.layer, state.editorTextOriginalOverride)
+            : state.regionSettings.clearText(exactRegionTarget(), state.layer);
+          if (changed) recordEditorChange("Text edit cancelled and the prior text restored.");
+        } else {
+          setEditorStatus("Text edit cancelled.");
+        }
+      } catch (error) {
+        setEditorStatus(error?.message || "The prior text could not be restored.", true);
+      }
+      node.textContent = state.editorTextStart;
+    }
+    node.removeAttribute("contenteditable");
+    node.removeAttribute("aria-multiline");
+    node.classList.remove("is-text-editing");
+    state.textEditing = false;
+    state.editorTextDirty = false;
+    state.editorTextAutosaved = false;
+    elements.editorTextToggle.checked = false;
+    configureEditorRegionAccessibility(node, true);
+    scheduleTextFit();
+    syncEditorPanel();
+  }
+
+  function setTextEditing(active) {
+    const node = selectedRegionNode();
+    if (!active) {
+      finishTextEditing(true);
+      return;
+    }
+    if (!node || !state.editorEnabled) return;
+    const localPatch = state.regionSettings.getScope(exactRegionTarget(), { source: "local" }) || {};
+    state.textEditing = true;
+    state.editorTextDirty = false;
+    state.editorTextHadOverride = hasOwn(localPatch.text, state.layer);
+    state.editorTextOriginalOverride = state.editorTextHadOverride ? String(localPatch.text[state.layer] ?? "") : "";
+    state.editorTextAutosaved = false;
+    state.editorTextStart = node.textContent || "";
+    node.contentEditable = "plaintext-only";
+    if (!node.isContentEditable) node.contentEditable = "true";
+    node.setAttribute("role", "textbox");
+    node.setAttribute("aria-multiline", "true");
+    node.setAttribute("aria-label", `Edit ${node.dataset.role.replaceAll("-", " ")} text on page ${state.page}`);
+    node.classList.add("is-text-editing");
+    node.removeAttribute("aria-hidden");
+    node.focus({ preventScroll: true });
+    setEditorStatus("Editing text. Press Escape to cancel or Control/Command+Enter to save.");
+    syncEditorPanel();
+  }
+
+  function insertTextAtSelection(text) {
+    const selection = window.getSelection?.();
+    if (!selection?.rangeCount) return false;
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    const textNode = document.createTextNode(normalizePlainText(text));
+    range.insertNode(textNode);
+    range.setStartAfter(textNode);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
+  }
+
+  function insertPlainText(event) {
+    if (!state.textEditing) return;
+    event.preventDefault();
+    const text = event.clipboardData?.getData("text/plain") || "";
+    if (insertTextAtSelection(text)) {
+      state.editorTextDirty = true;
+      scheduleTextFit();
+      queueEditedTextSave();
+    }
+  }
+
+  function geometryBoxFromInputs(changedControl, rawValue) {
+    const value = (control) => Number(control === changedControl ? rawValue : control.value) / 100;
+    const width = clamp(value(elements.editorGeometryWidth), 0.005, 1);
+    const height = clamp(value(elements.editorGeometryHeight), 0.005, 1);
+    const x = clamp(value(elements.editorGeometryX), 0, 1 - width);
+    const y = clamp(value(elements.editorGeometryY), 0, 1 - height);
+    return [x, y, x + width, y + height];
+  }
+
+  function commitGeometryInput(control, rawValue = control.value) {
+    const target = editorTarget();
+    if (!target || rawValue === "" || !control.checkValidity()) return;
+    if (target.scope === "region") {
+      setEditorPatch(target, { geometry: { box: geometryBoxFromInputs(control, rawValue) } }, "Region geometry updated.");
+    } else {
+      const properties = new Map([
+        [elements.editorGeometryX, ["translateX", -1, 1]],
+        [elements.editorGeometryY, ["translateY", -1, 1]],
+        [elements.editorGeometryWidth, ["scaleX", 0.25, 4]],
+        [elements.editorGeometryHeight, ["scaleY", 0.25, 4]]
+      ]);
+      const [property, minimum, maximum] = properties.get(control);
+      const value = clamp(Number(rawValue) / 100, minimum, maximum);
+      setEditorPatch(target, { geometry: { [property]: value } }, "Region scaling rule updated.");
+    }
+  }
+
+  function adjustedBox(box, mode, dx, dy) {
+    let [x0, y0, x1, y1] = box;
+    if (mode === "move") {
+      const width = x1 - x0;
+      const height = y1 - y0;
+      x0 = clamp(x0 + dx, 0, 1 - width);
+      y0 = clamp(y0 + dy, 0, 1 - height);
+      x1 = x0 + width;
+      y1 = y0 + height;
+    } else {
+      x1 = clamp(x1 + dx, x0 + 0.005, 1);
+      y1 = clamp(y1 + dy, y0 + 0.005, 1);
+    }
+    return [x0, y0, x1, y1];
+  }
+
+  function beginEditorDrag(event, mode) {
+    if (event.button !== 0) return;
+    const node = selectedRegionNode();
+    if (!node?.__whlDisplayBox) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    state.editorDrag = {
+      pointerId: event.pointerId,
+      handle: event.currentTarget,
+      mode,
+      startX: event.clientX,
+      startY: event.clientY,
+      startBox: [...node.__whlDisplayBox],
+      box: [...node.__whlDisplayBox],
+      pageRect: elements.facsimilePage.getBoundingClientRect()
+    };
+    elements.editorOverlay.classList.add("is-dragging");
+  }
+
+  function moveEditorDrag(event) {
+    const drag = state.editorDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const width = Math.max(1, drag.pageRect.width);
+    const height = Math.max(1, drag.pageRect.height);
+    drag.box = adjustedBox(drag.startBox, drag.mode, (event.clientX - drag.startX) / width, (event.clientY - drag.startY) / height);
+    const node = selectedRegionNode();
+    setRegionBox(node, drag.box);
+    syncEditorOverlay();
+    syncGeometryEditor(node, {});
+  }
+
+  function endEditorDrag(event, commit = true) {
+    const drag = state.editorDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    drag.handle.releasePointerCapture?.(event.pointerId);
+    state.editorDrag = null;
+    elements.editorOverlay.classList.remove("is-dragging");
+    const node = selectedRegionNode();
+    if (!commit) {
+      setRegionBox(node, drag.startBox);
+      syncEditorOverlay();
+      syncEditorPanel();
+      return;
+    }
+    setEditorPatch(exactRegionTarget(), { geometry: { box: drag.box } }, "Manual region adjustment saved.");
+  }
+
+  function nudgeEditorRegion(event, mode) {
+    if (!event.key.startsWith("Arrow")) return;
+    const node = selectedRegionNode();
+    if (!node?.__whlDisplayBox) return;
+    event.preventDefault();
+    const amount = event.shiftKey ? 0.01 : 0.002;
+    const dx = event.key === "ArrowLeft" ? -amount : event.key === "ArrowRight" ? amount : 0;
+    const dy = event.key === "ArrowUp" ? -amount : event.key === "ArrowDown" ? amount : 0;
+    const box = adjustedBox(node.__whlDisplayBox, mode, dx, dy);
+    setEditorPatch(exactRegionTarget(), { geometry: { box } }, mode === "move" ? "Region moved." : "Region resized.");
+  }
+
+  async function exportEditorSettings() {
+    try {
+      finishTextEditing(true);
+      const exported = state.regionSettings.export({ stringify: true, pretty: true });
+      const content = typeof exported === "string" ? exported : JSON.stringify(exported, null, 2);
+      const url = URL.createObjectURL(new Blob([content], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `whl-region-settings-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      setEditorStatus("Settings exported for review or publication.");
+    } catch (error) {
+      setEditorStatus(error?.message || "Settings could not be exported.", true);
+    }
+  }
+
+  async function importEditorSettings(file) {
+    if (!file) return;
+    try {
+      finishTextEditing(true);
+      if (file.size > 2_000_000) throw new Error("The settings file is larger than 2 MB.");
+      const documentValue = JSON.parse(await file.text());
+      const preview = window.WHLRegionSettings.createEngine({
+        local: documentValue,
+        projectId: "living-herbal",
+        editorEnabled: false
+      });
+      await preview.ready;
+      const canonical = preview.export();
+      const books = Object.keys(canonical.overrides);
+      const pages = Object.values(canonical.overrides).reduce(
+        (count, book) => count + Object.keys(book.pages || {}).length,
+        0
+      );
+      const approved = window.confirm(
+        `Import validated settings for ${books.length} ${books.length === 1 ? "book" : "books"} across ${pages} ${pages === 1 ? "page" : "pages"}? Existing local settings will be retained unless the import replaces the same property.`
+      );
+      if (!approved) {
+        setEditorStatus("Import cancelled; no settings changed.");
+        return;
+      }
+      const changed = state.regionSettings.import(canonical, { mode: "merge" });
+      if (changed) recordEditorChange("Validated settings imported.");
+      else setEditorStatus("The imported settings already match this draft.");
+      applyAllRegionSettings();
+    } catch (error) {
+      console.error("Unable to import region settings", error);
+      setEditorStatus(error?.message || "The settings file is invalid.", true);
+    } finally {
+      elements.editorImport.value = "";
+    }
+  }
+
+  function mountRegionEditor() {
+    if (!state.editorEnabled || elements.editorToggle.dataset.mounted === "true") return;
+    elements.editorToggle.dataset.mounted = "true";
+    elements.editorToggle.hidden = false;
+    elements.editorToggle.addEventListener("click", () => setEditorActive(!state.editorActive));
+    elements.editorClose.addEventListener("click", () => setEditorActive(false));
+    elements.editorScope.addEventListener("change", syncEditorPanel);
+    elements.editorPanel.querySelectorAll("[data-editor-path]").forEach((control) => {
+      const commit = (rawValue = control.value) => {
+        if (rawValue === "" || !control.checkValidity()) return;
+        const target = editorTarget();
+        const value = editorControlValue(control, rawValue);
+        setEditorPatch(target, editorPatchForPath(control.dataset.editorPath, value));
+      };
+      control.addEventListener("change", () => {
+        window.clearTimeout(state.editorControlTimers.get(control));
+        commit();
+      });
+      if (control.tagName === "INPUT") {
+        control.addEventListener("input", () => {
+          const rawValue = control.value;
+          window.clearTimeout(state.editorControlTimers.get(control));
+          state.editorControlTimers.set(control, window.setTimeout(() => commit(rawValue), 140));
+        });
+      }
+    });
+    elements.editorPanel.querySelectorAll("[data-editor-clear]").forEach((button) => {
+      button.addEventListener("click", () => removeEditorSetting(editorTarget(), button.dataset.editorClear));
+    });
+    [elements.editorGeometryX, elements.editorGeometryY, elements.editorGeometryWidth, elements.editorGeometryHeight]
+      .forEach((control) => {
+        const commit = (rawValue = control.value) => commitGeometryInput(control, rawValue);
+        control.addEventListener("change", () => {
+          window.clearTimeout(state.editorControlTimers.get(control));
+          commit();
+        });
+        control.addEventListener("input", () => {
+          const rawValue = control.value;
+          window.clearTimeout(state.editorControlTimers.get(control));
+          state.editorControlTimers.set(control, window.setTimeout(() => commit(rawValue), 140));
+        });
+      });
+    elements.editorResetGeometry.addEventListener("click", () => removeEditorSetting(editorTarget(), "geometry", "Inherited geometry restored."));
+    elements.editorTextToggle.addEventListener("change", () => setTextEditing(elements.editorTextToggle.checked));
+    elements.editorRestoreText.addEventListener("click", () => {
+      finishTextEditing(false);
+      try {
+        const target = exactRegionTarget();
+        const node = selectedRegionNode();
+        const basePatch = state.regionSettings.getScope(target, { source: "base" }) || {};
+        const sourceText = sanitizeDisplayText(selectedText(node.__whlSourceRegion || {}).value);
+        const changed = hasOwn(basePatch.text, state.layer)
+          ? state.regionSettings.setText(target, state.layer, sourceText)
+          : state.regionSettings.clearText(target, state.layer);
+        if (changed) recordEditorChange("OCR source text restored.");
+        else setEditorStatus("This region already uses its OCR source text.");
+      } catch (error) {
+        setEditorStatus(error?.message || "Source text could not be restored.", true);
+      }
+    });
+    elements.editorUndo.addEventListener("click", () => {
+      finishTextEditing(true);
+      const changed = state.regionSettings.undo();
+      if (changed) recordEditorChange("Last change undone.");
+      else syncEditorHistory();
+    });
+    elements.editorRedo.addEventListener("click", () => {
+      finishTextEditing(true);
+      const changed = state.regionSettings.redo();
+      if (changed) recordEditorChange("Change restored.");
+      else syncEditorHistory();
+    });
+    elements.editorResetScope.addEventListener("click", () => {
+      finishTextEditing(true);
+      removeEditorSetting(editorTarget(), undefined, "Local settings for this scope reset.");
+    });
+    elements.editorExport.addEventListener("click", exportEditorSettings);
+    elements.editorImport.addEventListener("change", () => importEditorSettings(elements.editorImport.files?.[0]));
+
+    elements.facsimileText.addEventListener("click", (event) => {
+      if (!state.editorActive) return;
+      const region = event.target.closest?.(".text-region");
+      if (region && elements.facsimileText.contains(region)) selectEditorRegion(region.dataset.regionId, { focus: false });
+    });
+    elements.facsimileText.addEventListener("keydown", (event) => {
+      const region = event.target.closest?.(".text-region");
+      if (!region || !state.editorActive) return;
+      if (event.isComposing || state.editorComposing) return;
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && state.textEditing) {
+        event.preventDefault();
+        finishTextEditing(true);
+        region.focus({ preventScroll: true });
+      } else if (!state.textEditing
+        && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
+        && (!region.classList.contains("is-overflowing") || event.ctrlKey)) {
+        event.preventDefault();
+        const regions = [...elements.facsimileText.querySelectorAll(".text-region")];
+        const direction = ["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 1;
+        const next = regions[(regions.indexOf(region) + direction + regions.length) % regions.length];
+        if (next) selectEditorRegion(next.dataset.regionId);
+      } else if (!state.textEditing && ["Enter", " "].includes(event.key)) {
+        event.preventDefault();
+        selectEditorRegion(region.dataset.regionId, { focus: false });
+        elements.editorScope.focus({ preventScroll: true });
+      }
+    });
+    elements.facsimileText.addEventListener("beforeinput", (event) => {
+      if (!state.textEditing || event.isComposing || event.inputType !== "insertParagraph") return;
+      event.preventDefault();
+      if (insertTextAtSelection("\n")) {
+        state.editorTextDirty = true;
+        scheduleTextFit();
+        queueEditedTextSave();
+      }
+    });
+    elements.facsimileText.addEventListener("input", (event) => {
+      if (state.textEditing && event.target === selectedRegionNode() && !state.editorComposing) {
+        state.editorTextDirty = true;
+        setEditorStatus("Text correction pending local save…");
+        scheduleTextFit();
+        queueEditedTextSave();
+      }
+    });
+    elements.facsimileText.addEventListener("compositionstart", () => { state.editorComposing = true; });
+    elements.facsimileText.addEventListener("compositionend", () => {
+      state.editorComposing = false;
+      state.editorTextDirty = true;
+      scheduleTextFit();
+      queueEditedTextSave();
+    });
+    elements.facsimileText.addEventListener("paste", insertPlainText);
+    elements.facsimileText.addEventListener("focusout", (event) => {
+      if (!state.textEditing || event.target !== selectedRegionNode()) return;
+      if (!event.relatedTarget || !event.target.contains(event.relatedTarget)) persistEditedText();
+    });
+
+    elements.editorMoveHandle.addEventListener("pointerdown", (event) => beginEditorDrag(event, "move"));
+    elements.editorResizeHandle.addEventListener("pointerdown", (event) => beginEditorDrag(event, "resize"));
+    [elements.editorMoveHandle, elements.editorResizeHandle].forEach((handle) => {
+      handle.addEventListener("pointermove", moveEditorDrag);
+      handle.addEventListener("pointerup", (event) => endEditorDrag(event, true));
+      handle.addEventListener("pointercancel", (event) => endEditorDrag(event, false));
+    });
+    elements.editorMoveHandle.addEventListener("keydown", (event) => nudgeEditorRegion(event, "move"));
+    elements.editorResizeHandle.addEventListener("keydown", (event) => nudgeEditorRegion(event, "resize"));
+    const flushEditorDraft = () => {
+      if (state.textEditing && !state.editorComposing) persistEditedText();
+      state.regionSettings.flush().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flushEditorDraft();
+    });
+    window.addEventListener("pagehide", flushEditorDraft);
+    syncEditorPanel();
   }
 
   function cachePage(url, data) {
@@ -1067,6 +2216,7 @@
     window.clearTimeout(state.rangeTimer);
     const page = clamp(parsePage(nextPage, state.page), 1, state.totalPages);
     const changed = page !== state.page;
+    if (changed && state.editorActive) clearEditorSelection();
     state.page = page;
     updatePageControls();
     if (options.history !== "none") updateHistory(options.history || "push");
@@ -1075,6 +2225,7 @@
 
   function setLayer(layer) {
     if (!["modern", "diplomatic"].includes(layer)) return;
+    if (state.textEditing) finishTextEditing(true);
     state.layer = layer;
     savePreference("whl-text-layer", layer);
     elements.layerInputs.forEach((input) => { input.checked = input.value === layer; });
@@ -1174,7 +2325,7 @@
     elements.shell.classList.toggle("is-faux-fullscreen", state.fauxFullscreen);
     document.body.classList.toggle("has-reader-fullscreen", active);
     elements.fullscreenToggle.setAttribute("aria-pressed", String(active));
-    elements.fullscreenToggle.setAttribute("aria-label", "Full screen");
+    elements.fullscreenToggle.setAttribute("aria-label", active ? "Exit full screen" : "Full screen");
     elements.fullscreenToggle.title = active ? "Exit full screen" : "Enter full screen";
     elements.fullscreenLabel.textContent = active ? "Exit full screen" : "Full screen";
     if (active) elements.readingSettings.open = false;
@@ -1285,6 +2436,20 @@
     });
 
     window.addEventListener("keydown", (event) => {
+      if (event.isComposing || state.editorComposing) return;
+      if (event.key === "Escape" && state.textEditing) {
+        event.preventDefault();
+        const region = selectedRegionNode();
+        finishTextEditing(false);
+        region?.focus({ preventScroll: true });
+        return;
+      }
+      if (event.key === "Escape" && state.editorActive) {
+        event.preventDefault();
+        setEditorActive(false);
+        announce("Region editor closed");
+        return;
+      }
       if (event.key === "Escape" && state.fauxFullscreen) {
         event.preventDefault();
         if (elements.readingSettings.open) {
@@ -1297,8 +2462,7 @@
       }
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target;
-      if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement || target instanceof HTMLButtonElement || target?.isContentEditable) return;
-      if (target === elements.spreadScroll || target?.closest?.("a, summary, [role='button'], .text-region.is-overflowing, #spread-scroll")) return;
+      if (reservesArrowKeys(target)) return;
       const actions = {
         ArrowLeft: () => setPage(state.page - 1),
         ArrowRight: () => setPage(state.page + 1)
@@ -1344,6 +2508,7 @@
     setMessage("Opening the catalogue…");
 
     try {
+      await initializeRegionSettings();
       const catalog = await fetchJson(catalogUrl, undefined, "no-cache");
       const books = Array.isArray(catalog.books) ? catalog.books.filter((book) => book?.id && book?.manifest) : [];
       if (!books.length) throw new Error("The catalogue contains no book manifests.");
@@ -1373,7 +2538,10 @@
     normalizeConfidence,
     preferredPage,
     filmstripPages,
-    sanitizeDisplayText
+    sanitizeDisplayText,
+    isRegionEditorEnabled,
+    reservesArrowKeys,
+    transformedRegionBox
   });
 
   initialize();

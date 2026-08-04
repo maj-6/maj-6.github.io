@@ -37,7 +37,7 @@ jobs:
           python -m unittest discover -s tests/pipeline -p "test_*.py"
           python -m unittest discover -s tests/release -p "test_*.py"
       - name: Test static reader
-        run: node --test tests/web/static-reader.test.mjs
+        run: node --test tests/web/*.test.mjs
       - name: Verify committed catalog and CDN release
         run: python scripts/release_smoke.py --root . predeploy
       - name: Configure Pages

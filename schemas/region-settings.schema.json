@@ -1,0 +1,282 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://maj-6.github.io/schemas/region-settings.schema.json",
+  "title": "World Herb Library region settings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schemaVersion", "projectId", "overrides"],
+  "properties": {
+    "schema": {
+      "const": "whl-region-settings/1"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "projectId": {
+      "const": "living-herbal"
+    },
+    "overrides": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/safeId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/bookOverrides"
+      }
+    }
+  },
+  "$defs": {
+    "safeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "not": {
+        "enum": ["__proto__", "prototype", "constructor"]
+      }
+    },
+    "pageNumber": {
+      "type": "string",
+      "pattern": "^(?:[1-9]|[1-9][0-9]{1,6}|10000000)$"
+    },
+    "role": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+      "not": {
+        "enum": ["__proto__", "prototype", "constructor"]
+      }
+    },
+    "style": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fontFamily": {
+          "enum": ["edition", "georgia", "palatino", "sans"]
+        },
+        "fontSize": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 4
+        },
+        "fontWeight": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 900
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$"
+        },
+        "lineHeight": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 4
+        },
+        "letterSpacing": {
+          "type": "number",
+          "minimum": -0.25,
+          "maximum": 1
+        }
+      }
+    },
+    "geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "translateX": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "translateY": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "scaleX": {
+          "type": "number",
+          "minimum": 0.25,
+          "maximum": 4
+        },
+        "scaleY": {
+          "type": "number",
+          "minimum": 0.25,
+          "maximum": 4
+        }
+      }
+    },
+    "regionGeometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "box": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "translateX": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "translateY": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "scaleX": {
+          "type": "number",
+          "minimum": 0.25,
+          "maximum": 4
+        },
+        "scaleY": {
+          "type": "number",
+          "minimum": 0.25,
+          "maximum": 4
+        }
+      }
+    },
+    "fit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": ["scroll", "grow-width", "shrink-text", "grow-then-shrink"]
+        },
+        "wrap": {
+          "enum": ["normal", "nowrap", "balance"]
+        },
+        "overflow": {
+          "enum": ["hidden", "auto", "scroll", "visible"]
+        },
+        "maxWidthScale": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "minFontScale": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 1
+        }
+      }
+    },
+    "text": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "modern": {
+          "type": "string",
+          "maxLength": 1000000
+        },
+        "diplomatic": {
+          "type": "string",
+          "maxLength": 1000000
+        }
+      }
+    },
+    "scopePatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "$ref": "#/$defs/style"
+        },
+        "geometry": {
+          "$ref": "#/$defs/geometry"
+        },
+        "fit": {
+          "$ref": "#/$defs/fit"
+        }
+      }
+    },
+    "regionPatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "$ref": "#/$defs/style"
+        },
+        "geometry": {
+          "$ref": "#/$defs/regionGeometry"
+        },
+        "fit": {
+          "$ref": "#/$defs/fit"
+        },
+        "text": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "regionTypeMap": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/role"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/scopePatch"
+      }
+    },
+    "regionMap": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/safeId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/regionPatch"
+      }
+    },
+    "pageOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "$ref": "#/$defs/style"
+        },
+        "geometry": {
+          "$ref": "#/$defs/geometry"
+        },
+        "fit": {
+          "$ref": "#/$defs/fit"
+        },
+        "regionTypes": {
+          "$ref": "#/$defs/regionTypeMap"
+        },
+        "regions": {
+          "$ref": "#/$defs/regionMap"
+        }
+      }
+    },
+    "pageMap": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/pageNumber"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/pageOverride"
+      }
+    },
+    "bookOverrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "book": {
+          "$ref": "#/$defs/scopePatch"
+        },
+        "regionTypes": {
+          "$ref": "#/$defs/regionTypeMap"
+        },
+        "pages": {
+          "$ref": "#/$defs/pageMap"
+        }
+      }
+    }
+  }
+}

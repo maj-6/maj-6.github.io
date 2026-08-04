@@ -7,8 +7,9 @@
   <meta name="description" content="A side-by-side reader for original herbal scans and their modern facsimile editions.">
   <title>Facsimile reader — World Herb Library</title>
   <link rel="stylesheet" href="assets/site.css">
-  <link rel="stylesheet" href="assets/reader.css?v=4">
-  <script src="assets/reader.js?v=4" defer></script>
+  <link rel="stylesheet" href="assets/reader.css?v=5">
+  <script src="assets/region-settings.js?v=1" defer></script>
+  <script src="assets/reader.js?v=5" defer></script>
 </head>
 <body class="reader-body" data-view="both">
   <a class="skip-link" href="#reader-stage">Skip to the page</a>
@@ -77,6 +78,11 @@
     </div>
 
     <div class="reader-actions">
+      <button class="reader-action-button editor-toggle" id="editor-toggle" type="button" aria-controls="region-editor-panel" aria-pressed="false" aria-expanded="false" hidden>
+        <span aria-hidden="true">✎</span>
+        <span>Edit regions</span>
+      </button>
+
       <details class="reading-settings" id="reading-settings">
         <summary class="reader-action-button">Display</summary>
         <fieldset class="reading-settings-card">
@@ -139,6 +145,10 @@
         <div class="page-viewport facsimile-viewport">
           <div class="facsimile-page is-loading" id="facsimile-page" role="document" aria-label="Facsimile page loading">
             <div class="facsimile-text" id="facsimile-text"></div>
+            <div class="editor-region-overlay" id="editor-region-overlay" hidden>
+              <button class="editor-region-handle editor-move-handle" id="editor-move-handle" type="button" aria-label="Move selected region" title="Drag to move; use arrow keys to nudge">Move</button>
+              <button class="editor-region-handle editor-resize-handle" id="editor-resize-handle" type="button" aria-label="Resize selected region" title="Drag to resize; use arrow keys to adjust">↘</button>
+            </div>
           </div>
           <div class="page-error" id="facsimile-error" hidden>
             <strong>Facsimile text unavailable.</strong>
@@ -149,6 +159,111 @@
     </div>
     </div>
   </main>
+
+  <aside class="region-editor-panel" id="region-editor-panel" aria-labelledby="region-editor-title" hidden>
+    <header class="region-editor-header">
+      <div>
+        <p class="region-editor-eyebrow">Facsimile editor</p>
+        <h2 id="region-editor-title">Region settings</h2>
+      </div>
+      <button class="editor-icon-button" id="editor-close" type="button" aria-label="Close region editor">×</button>
+    </header>
+
+    <p class="editor-selection" id="editor-selection">Choose a text region on the facsimile page.</p>
+
+    <label class="editor-field editor-scope-field" for="editor-scope">
+      <span>Apply changes to</span>
+      <select id="editor-scope">
+        <option value="region">This region</option>
+        <option value="pageRegionType">This page’s region type</option>
+        <option value="page">This page</option>
+        <option value="regionType">This region type</option>
+        <option value="book">This book</option>
+      </select>
+    </label>
+
+    <fieldset class="editor-section" id="editor-typography">
+      <legend>Typography</legend>
+      <div class="editor-field-row">
+        <label class="editor-field" for="editor-font-family"><span>Font</span><select id="editor-font-family" data-editor-path="style.fontFamily"><option value="edition">Edition typography</option><option value="georgia">Georgia serif</option><option value="palatino">Palatino serif</option><option value="sans">System sans serif</option></select></label>
+        <button class="editor-inherit" type="button" data-editor-clear="style.fontFamily" aria-label="Inherit font">Inherit</button>
+      </div>
+      <div class="editor-field-row">
+        <label class="editor-field" for="editor-font-size"><span>Font size <small>(%)</small></span><input id="editor-font-size" data-editor-path="style.fontSize" data-editor-factor="0.01" type="number" min="50" max="400" step="5" value="100"></label>
+        <button class="editor-inherit" type="button" data-editor-clear="style.fontSize" aria-label="Inherit font size">Inherit</button>
+      </div>
+      <div class="editor-field-row">
+        <label class="editor-field" for="editor-font-weight"><span>Weight</span><select id="editor-font-weight" data-editor-path="style.fontWeight"><option value="100">Thin</option><option value="200">Extra light</option><option value="300">Light</option><option value="400">Regular</option><option value="500">Medium</option><option value="600">Semibold</option><option value="700">Bold</option><option value="800">Extra bold</option><option value="900">Black</option></select></label>
+        <button class="editor-inherit" type="button" data-editor-clear="style.fontWeight" aria-label="Inherit font weight">Inherit</button>
+      </div>
+      <div class="editor-field-row">
+        <label class="editor-field" for="editor-font-color"><span>Color</span><input id="editor-font-color" data-editor-path="style.color" type="color" value="#29261e"></label>
+        <button class="editor-inherit" type="button" data-editor-clear="style.color" aria-label="Inherit font color">Inherit</button>
+      </div>
+      <div class="editor-field-row">
+        <label class="editor-field" for="editor-line-height"><span>Line height</span><input id="editor-line-height" data-editor-path="style.lineHeight" type="number" min="0.5" max="4" step="0.05" value="1.17"></label>
+        <button class="editor-inherit" type="button" data-editor-clear="style.lineHeight" aria-label="Inherit line height">Inherit</button>
+      </div>
+      <div class="editor-field-row">
+        <label class="editor-field" for="editor-letter-spacing"><span>Character spacing <small>(em)</small></span><input id="editor-letter-spacing" data-editor-path="style.letterSpacing" type="number" min="-0.25" max="1" step="0.01" value="0"></label>
+        <button class="editor-inherit" type="button" data-editor-clear="style.letterSpacing" aria-label="Inherit character spacing">Inherit</button>
+      </div>
+    </fieldset>
+
+    <fieldset class="editor-section" id="editor-fit-rules">
+      <legend>Fit and wrapping</legend>
+      <div class="editor-field-row">
+        <label class="editor-field" for="editor-fit-mode"><span>Fit rule</span><select id="editor-fit-mode" data-editor-path="fit.mode"><option value="scroll">Scroll overflow</option><option value="grow-width">Grow width</option><option value="shrink-text">Shrink text</option><option value="grow-then-shrink">Grow, then shrink</option></select></label>
+        <button class="editor-inherit" type="button" data-editor-clear="fit.mode" aria-label="Inherit fit rule">Inherit</button>
+      </div>
+      <div class="editor-field-row">
+        <label class="editor-field" for="editor-wrap"><span>Wrapping</span><select id="editor-wrap" data-editor-path="fit.wrap"><option value="normal">Wrap lines</option><option value="balance">Balance lines</option><option value="nowrap">Keep on one line</option></select></label>
+        <button class="editor-inherit" type="button" data-editor-clear="fit.wrap" aria-label="Inherit wrapping">Inherit</button>
+      </div>
+      <div class="editor-field-row">
+        <label class="editor-field" for="editor-overflow"><span>Overflow</span><select id="editor-overflow" data-editor-path="fit.overflow"><option value="auto">Auto</option><option value="scroll">Always scroll</option><option value="hidden">Hidden</option><option value="visible">Visible</option></select></label>
+        <button class="editor-inherit" type="button" data-editor-clear="fit.overflow" aria-label="Inherit overflow">Inherit</button>
+      </div>
+      <div class="editor-field-row">
+        <label class="editor-field" for="editor-max-width"><span>Maximum width <small>(%)</small></span><input id="editor-max-width" data-editor-path="fit.maxWidthScale" data-editor-factor="0.01" type="number" min="100" max="400" step="5" value="150"></label>
+        <button class="editor-inherit" type="button" data-editor-clear="fit.maxWidthScale" aria-label="Inherit maximum width">Inherit</button>
+      </div>
+      <div class="editor-field-row">
+        <label class="editor-field" for="editor-min-font"><span>Minimum font <small>(%)</small></span><input id="editor-min-font" data-editor-path="fit.minFontScale" data-editor-factor="0.01" type="number" min="50" max="100" step="5" value="70"></label>
+        <button class="editor-inherit" type="button" data-editor-clear="fit.minFontScale" aria-label="Inherit minimum font size">Inherit</button>
+      </div>
+    </fieldset>
+
+    <fieldset class="editor-section editor-geometry" id="editor-geometry">
+      <legend>Region geometry</legend>
+      <p class="editor-help" id="editor-geometry-help">Exact position and size for this region, as percentages of the page.</p>
+      <div class="editor-geometry-grid">
+        <label class="editor-field" for="editor-geometry-x"><span id="editor-geometry-x-label">Left (%)</span><input id="editor-geometry-x" type="number" min="0" max="100" step="0.1"></label>
+        <label class="editor-field" for="editor-geometry-y"><span id="editor-geometry-y-label">Top (%)</span><input id="editor-geometry-y" type="number" min="0" max="100" step="0.1"></label>
+        <label class="editor-field" for="editor-geometry-width"><span id="editor-geometry-width-label">Width (%)</span><input id="editor-geometry-width" type="number" min="0.5" max="100" step="0.1"></label>
+        <label class="editor-field" for="editor-geometry-height"><span id="editor-geometry-height-label">Height (%)</span><input id="editor-geometry-height" type="number" min="0.5" max="100" step="0.1"></label>
+      </div>
+      <button class="editor-inherit editor-inherit-wide" id="editor-reset-geometry" type="button">Inherit geometry</button>
+    </fieldset>
+
+    <fieldset class="editor-section editor-text-section">
+      <legend>Text correction</legend>
+      <label class="editor-check" for="editor-text-toggle"><input id="editor-text-toggle" type="checkbox"><span>Edit selected text on the page</span></label>
+      <button class="editor-secondary" id="editor-restore-text" type="button">Restore OCR source</button>
+    </fieldset>
+
+    <div class="editor-history" aria-label="Edit history">
+      <button class="editor-secondary" id="editor-undo" type="button" disabled>Undo</button>
+      <button class="editor-secondary" id="editor-redo" type="button" disabled>Redo</button>
+      <button class="editor-secondary editor-danger" id="editor-reset-scope" type="button">Reset this scope</button>
+    </div>
+
+    <div class="editor-data-actions">
+      <button class="editor-secondary" id="editor-export" type="button">Export JSON</button>
+      <label class="editor-secondary editor-import" for="editor-import">Import JSON<input id="editor-import" type="file" accept="application/json,.json"></label>
+    </div>
+    <p class="editor-status" id="editor-status" role="status" aria-live="polite">Changes are saved in this browser.</p>
+  </aside>
 
   <section class="filmstrip-shell" aria-label="Page thumbnails">
     <div class="filmstrip-heading">
