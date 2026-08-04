@@ -492,7 +492,7 @@
       updatePageControls();
       setControlsEnabled(true);
       updateHistory(historyMode);
-      await loadPage(state.page, false);
+      await loadPage(state.page);
     } catch (error) {
       if (error.name === "AbortError") return;
       console.error("Unable to load book manifest", error);
