@@ -1,5 +1,10 @@
 # Region editor contract
 
+> This document describes the version 1 transitional browser editor. Editing
+> is currently enabled while the Electron/Blueprint replacement is built. The
+> modular v2 contract is defined in [`spec/ENGINE_V2.md`](spec/ENGINE_V2.md),
+> and GitHub Pages returns to a reader-only runtime after desktop parity.
+
 The facsimile application has two operating modes built on the same region
 settings engine:
 
@@ -22,7 +27,7 @@ configuration:
   "schema": "whl-reader-config/1",
   "projectId": "living-herbal",
   "features": {
-    "regionEditor": false
+    "regionEditor": true
   },
   "publishedSettings": "data/region-settings.json",
   "draftStorageKey": "whl-region-settings-v1"

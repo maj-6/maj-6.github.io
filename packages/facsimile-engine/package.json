@@ -1,0 +1,6 @@
+{
+  "name": "@whl/facsimile-engine",
+  "private": true,
+  "type": "module",
+  "exports": "./index.js"
+}

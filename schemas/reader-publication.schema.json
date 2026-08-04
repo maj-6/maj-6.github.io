@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://maj-6.github.io/schemas/reader-publication.schema.json",
+  "title": "World Herb Library reader publication",
+  "description": "Deterministic, reader-safe projection compiled from a validated facsimile authoring revision.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schemaVersion",
+    "projectId",
+    "revision",
+    "activeEdition",
+    "contentHash",
+    "sourceFingerprints",
+    "taxonomy",
+    "books",
+    "diagnostics",
+    "extensions"
+  ],
+  "properties": {
+    "schema": { "const": "whl-reader-publication/1" },
+    "schemaVersion": { "const": 1 },
+    "projectId": { "$ref": "#/$defs/safeId" },
+    "revision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "activeEdition": { "enum": ["modern", "diplomatic", "publication"] },
+    "contentHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sourceFingerprints": { "$ref": "#/$defs/sourceFingerprintMap" },
+    "taxonomy": { "$ref": "#/$defs/publicTaxonomy" },
+    "books": { "$ref": "#/$defs/bookMap" },
+    "diagnostics": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/diagnostic" }
+    },
+    "extensions": { "$ref": "#/$defs/extensionMap" }
+  },
+  "$defs": {
+    "safeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "not": { "enum": ["__proto__", "prototype", "constructor"] }
+    },
+    "extensionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9.-]{0,127}$",
+      "not": { "enum": ["__proto__", "prototype", "constructor"] }
+    },
+    "role": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+      "not": { "enum": ["__proto__", "prototype", "constructor"] }
+    },
+    "pageKey": {
+      "type": "string",
+      "pattern": "^(?:[1-9]|[1-9][0-9]{1,6}|10000000)$"
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "fingerprint": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "color": {
+      "type": "string",
+      "pattern": "^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$"
+    },
+    "sourceFingerprintMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/fingerprint" }
+    },
+    "publicCategory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "capabilities"],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeId" },
+        "displayName": { "$ref": "#/$defs/displayName" },
+        "parentId": { "$ref": "#/$defs/safeId" },
+        "capabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/safeId" }
+        },
+        "color": { "$ref": "#/$defs/color" }
+      }
+    },
+    "categoryMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/publicCategory" }
+    },
+    "publicTaxonomy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["categories"],
+      "properties": { "categories": { "$ref": "#/$defs/categoryMap" } }
+    },
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bookId", "page", "regionId", "fingerprint"],
+      "properties": {
+        "bookId": { "$ref": "#/$defs/safeId" },
+        "page": { "type": "integer", "minimum": 1, "maximum": 10000000 },
+        "regionId": { "$ref": "#/$defs/safeId" },
+        "fingerprint": { "$ref": "#/$defs/fingerprint" }
+      }
+    },
+    "publicAnnotations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "displayName": { "$ref": "#/$defs/displayName" },
+        "categoryId": { "$ref": "#/$defs/safeId" }
+      }
+    },
+    "componentBag": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/jsonObject" }
+    },
+    "rendererResult": {
+      "type": "object",
+      "required": ["rendererId"],
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "properties": { "rendererId": { "$ref": "#/$defs/safeId" } },
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    },
+    "diagnostic": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "properties": {
+        "code": { "$ref": "#/$defs/safeId" },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "message": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      },
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    },
+    "region": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sourceRef",
+        "sourceRole",
+        "annotations",
+        "components",
+        "diagnostics"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeId" },
+        "sourceRef": { "$ref": "#/$defs/sourceRef" },
+        "sourceRole": { "$ref": "#/$defs/role" },
+        "annotations": { "$ref": "#/$defs/publicAnnotations" },
+        "components": { "$ref": "#/$defs/componentBag" },
+        "renderer": {
+          "anyOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/rendererResult" }
+          ]
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/diagnostic" }
+        }
+      }
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["page", "regions"],
+      "properties": {
+        "page": { "type": "integer", "minimum": 1, "maximum": 10000000 },
+        "displayName": { "$ref": "#/$defs/displayName" },
+        "regions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/region" }
+        }
+      }
+    },
+    "pageMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/pageKey" },
+      "additionalProperties": { "$ref": "#/$defs/page" }
+    },
+    "book": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "pages"],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeId" },
+        "displayName": { "$ref": "#/$defs/displayName" },
+        "pages": { "$ref": "#/$defs/pageMap" }
+      }
+    },
+    "bookMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/safeId" },
+      "additionalProperties": { "$ref": "#/$defs/book" }
+    },
+    "extensionMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/extensionId" },
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    },
+    "jsonValue": {
+      "type": ["null", "boolean", "number", "string", "array", "object"],
+      "items": { "$ref": "#/$defs/jsonValue" },
+      "propertyNames": {
+        "not": { "enum": ["__proto__", "prototype", "constructor"] }
+      },
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    },
+    "jsonObject": {
+      "type": "object",
+      "propertyNames": {
+        "not": { "enum": ["__proto__", "prototype", "constructor"] }
+      },
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    }
+  }
+}
