@@ -161,8 +161,8 @@ class StagePagesTests(unittest.TestCase):
         self.assertIn("id-token: write", deploy)
         self.assertIn("uses: actions/checkout@v6", deploy)
         self.assertIn("uses: actions/setup-python@v6", deploy)
-        self.assertIn("actions/configure-pages", deploy)
-        self.assertIn("actions/deploy-pages", deploy)
+        self.assertIn("uses: actions/configure-pages@v6", deploy)
+        self.assertIn("uses: actions/deploy-pages@v5", deploy)
         self.assertIn("scripts/release_smoke.py --root . postdeploy", deploy)
 
     def test_editor_workflow_uses_node24_action_runtime(self) -> None:
